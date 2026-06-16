@@ -1,0 +1,982 @@
+{
+  "id": "bfbf96e7-03ff-4c52-8ef3-ff27743f1f7e",
+  "revision": 0,
+  "last_node_id": 52,
+  "last_link_id": 76,
+  "nodes": [
+    {
+      "id": 18,
+      "type": "LoadImage",
+      "pos": [
+        -3140,
+        8660
+      ],
+      "size": [
+        490,
+        490
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            16
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_temp_uslcr_00001_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 20,
+      "type": "LoadImage",
+      "pos": [
+        -3140,
+        8150
+      ],
+      "size": [
+        490,
+        460
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            20
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_temp_ahzay_00001_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "AgnesImageToImage",
+      "pos": [
+        -2660,
+        5680
+      ],
+      "size": [
+        610,
+        440
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesImageToImage"
+      },
+      "widgets_values": [
+        "保留图像中的猫，将环境改为早晨冷色调",
+        1024,
+        768,
+        942121062088698,
+        "randomize"
+      ]
+    },
+    {
+      "id": 1,
+      "type": "AgnesTextToImage",
+      "pos": [
+        -3140,
+        5140
+      ],
+      "size": [
+        610,
+        300
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesTextToImage"
+      },
+      "widgets_values": [
+        "A large fantasy harbor city built on cliffs, hundreds of small boats, layered stone bridges, glowing windows, distant mountains, cloudy sunset sky, cinematic fantasy realism, wide-angle composition, rich architectural details, high visual density",
+        1536,
+        1024,
+        739297484748231,
+        "randomize"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "PreviewImage",
+      "pos": [
+        -2490,
+        5140
+      ],
+      "size": [
+        480,
+        420
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 7
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "PreviewImage",
+      "pos": [
+        -2020,
+        5680
+      ],
+      "size": [
+        490,
+        470
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 6
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "LoadImage",
+      "pos": [
+        -3150,
+        5680
+      ],
+      "size": [
+        330,
+        440
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_temp_ahzay_00001_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 46,
+      "type": "LoadImage",
+      "pos": [
+        -3130,
+        6310
+      ],
+      "size": [
+        330,
+        440
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            64
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_temp_ahzay_00001_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 9,
+      "type": "AgnesImageToVideo",
+      "pos": [
+        -2760,
+        6310
+      ],
+      "size": [
+        600,
+        450
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 64
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            65
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            66
+          ]
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            67
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesImageToVideo"
+      },
+      "widgets_values": [
+        "这只猫在海边散步",
+        "Text, watermark, texture image, low quality, blurry, distorted, ugly, bad anatomy, worst quality",
+        1920,
+        768,
+        24,
+        1,
+        1100868871373392,
+        "randomize",
+        50
+      ]
+    },
+    {
+      "id": 47,
+      "type": "CreateVideo",
+      "pos": [
+        -2110,
+        6310
+      ],
+      "size": [
+        270,
+        78
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 65
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 66
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 67
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            68
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30
+      ]
+    },
+    {
+      "id": 48,
+      "type": "SaveVideo",
+      "pos": [
+        -1780,
+        6310
+      ],
+      "size": [
+        800,
+        760
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 68
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "mp4",
+        "h264"
+      ]
+    },
+    {
+      "id": 49,
+      "type": "SaveVideo",
+      "pos": [
+        -1820,
+        7270
+      ],
+      "size": [
+        800,
+        760
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 69
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "mp4",
+        "h264"
+      ]
+    },
+    {
+      "id": 50,
+      "type": "CreateVideo",
+      "pos": [
+        -2150,
+        7270
+      ],
+      "size": [
+        270,
+        78
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 70
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 71
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            69
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30
+      ]
+    },
+    {
+      "id": 44,
+      "type": "AgnesTextToVideo",
+      "pos": [
+        -3140,
+        7270
+      ],
+      "size": [
+        950,
+        500
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            70
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            71
+          ]
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            72
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesTextToVideo"
+      },
+      "widgets_values": [
+        "A cinematic shot of a cat walking on the beach at sunset, soft ocean waves, warm golden lighting, realistic motion",
+        "Text, watermark, texture image, low quality, blurry, distorted, ugly, bad anatomy, worst quality",
+        1152,
+        768,
+        24,
+        5,
+        1121817693610914,
+        "randomize",
+        50
+      ]
+    },
+    {
+      "id": 51,
+      "type": "SaveVideo",
+      "pos": [
+        -1400,
+        8260
+      ],
+      "size": [
+        800,
+        760
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 73
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "mp4",
+        "h264"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "AgnesMultiImageToVideo",
+      "pos": [
+        -2570,
+        8260
+      ],
+      "size": [
+        810,
+        780
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 20
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 16
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image6",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image7",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image8",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image9",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image10",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            74
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            75
+          ]
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            76
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesMultiImageToVideo"
+      },
+      "widgets_values": [
+        "multi-image",
+        "10秒无缝过渡视频提示：  \n一只虎斑白猫在夕阳下漫步于沙滩，轻柔的海浪拍打岸边，温暖的金色光芒洒满整个场景。当夕阳西下，环境自然过渡为一条布满砖砌建筑的城市街道，猫咪继续稳步穿行在柏油路上，海滩元素逐渐消失，城市元素浮现，整个过渡过程中，猫咪的姿态、灯光氛围和动态流畅一致，保持完整连续。",
+        "low quality, blurry, distorted, ugly, bad anatomy, worst quality",
+        1024,
+        768,
+        24,
+        10,
+        772253894558173,
+        "fixed",
+        50
+      ]
+    },
+    {
+      "id": 52,
+      "type": "CreateVideo",
+      "pos": [
+        -1730,
+        8260
+      ],
+      "size": [
+        270,
+        78
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 74
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 75
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 76
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            73
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30
+      ]
+    }
+  ],
+  "links": [
+    [
+      5,
+      6,
+      0,
+      7,
+      0,
+      "IMAGE"
+    ],
+    [
+      6,
+      7,
+      0,
+      8,
+      0,
+      "IMAGE"
+    ],
+    [
+      7,
+      1,
+      0,
+      4,
+      0,
+      "IMAGE"
+    ],
+    [
+      16,
+      18,
+      0,
+      11,
+      1,
+      "IMAGE"
+    ],
+    [
+      20,
+      20,
+      0,
+      11,
+      0,
+      "IMAGE"
+    ],
+    [
+      64,
+      46,
+      0,
+      9,
+      0,
+      "IMAGE"
+    ],
+    [
+      65,
+      9,
+      0,
+      47,
+      0,
+      "IMAGE"
+    ],
+    [
+      66,
+      9,
+      1,
+      47,
+      1,
+      "AUDIO"
+    ],
+    [
+      67,
+      9,
+      2,
+      47,
+      2,
+      "FLOAT"
+    ],
+    [
+      68,
+      47,
+      0,
+      48,
+      0,
+      "VIDEO"
+    ],
+    [
+      69,
+      50,
+      0,
+      49,
+      0,
+      "VIDEO"
+    ],
+    [
+      70,
+      44,
+      0,
+      50,
+      0,
+      "IMAGE"
+    ],
+    [
+      71,
+      44,
+      1,
+      50,
+      1,
+      "AUDIO"
+    ],
+    [
+      72,
+      44,
+      2,
+      50,
+      2,
+      "FLOAT"
+    ],
+    [
+      73,
+      52,
+      0,
+      51,
+      0,
+      "VIDEO"
+    ],
+    [
+      74,
+      11,
+      0,
+      52,
+      0,
+      "IMAGE"
+    ],
+    [
+      75,
+      11,
+      1,
+      52,
+      1,
+      "AUDIO"
+    ],
+    [
+      76,
+      11,
+      2,
+      52,
+      2,
+      "FLOAT"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "文生图",
+      "bounding": [
+        -3150,
+        5070,
+        1150,
+        500
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "图像修改",
+      "bounding": [
+        -3160,
+        5610,
+        1640,
+        550
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "单图生视频",
+      "bounding": [
+        -3160,
+        6210,
+        2210,
+        930
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "多图生视频",
+      "bounding": [
+        -3150,
+        8080,
+        2560,
+        1100
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "文生视频",
+      "bounding": [
+        -3150,
+        7170,
+        2170,
+        890
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6209213230591555,
+      "offset": [
+        5041.859737345992,
+        -5366.130186220606
+      ]
+    },
+    "frontendVersion": "1.45.15",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
