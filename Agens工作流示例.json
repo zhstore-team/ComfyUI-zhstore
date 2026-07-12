@@ -1,19 +1,19 @@
 {
-  "id": "bfbf96e7-03ff-4c52-8ef3-ff27743f1f7e",
+  "id": "f6cd0ddf-94db-44c9-bf33-873c0d41415d",
   "revision": 0,
-  "last_node_id": 52,
-  "last_link_id": 76,
+  "last_node_id": 26,
+  "last_link_id": 29,
   "nodes": [
     {
-      "id": 18,
-      "type": "LoadImage",
+      "id": 2,
+      "type": "AgnesTextToVideo",
       "pos": [
-        -3140,
-        8660
+        -400,
+        -280
       ],
       "size": [
-        490,
-        490
+        400,
+        447.59375
       ],
       "flags": {},
       "order": 0,
@@ -21,525 +21,24 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "IMAGE",
+          "name": "frames",
           "type": "IMAGE",
           "links": [
-            16
+            4
           ]
         },
         {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "ComfyUI_temp_uslcr_00001_.png",
-        "image"
-      ]
-    },
-    {
-      "id": 20,
-      "type": "LoadImage",
-      "pos": [
-        -3140,
-        8150
-      ],
-      "size": [
-        490,
-        460
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            20
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "ComfyUI_temp_ahzay_00001_.png",
-        "image"
-      ]
-    },
-    {
-      "id": 7,
-      "type": "AgnesImageToImage",
-      "pos": [
-        -2660,
-        5680
-      ],
-      "size": [
-        610,
-        440
-      ],
-      "flags": {},
-      "order": 8,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 5
-        }
-      ],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            6
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "AgnesImageToImage"
-      },
-      "widgets_values": [
-        "保留图像中的猫，将环境改为早晨冷色调",
-        1024,
-        768,
-        942121062088698,
-        "randomize"
-      ]
-    },
-    {
-      "id": 1,
-      "type": "AgnesTextToImage",
-      "pos": [
-        -3140,
-        5140
-      ],
-      "size": [
-        610,
-        300
-      ],
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            7
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "AgnesTextToImage"
-      },
-      "widgets_values": [
-        "A large fantasy harbor city built on cliffs, hundreds of small boats, layered stone bridges, glowing windows, distant mountains, cloudy sunset sky, cinematic fantasy realism, wide-angle composition, rich architectural details, high visual density",
-        1536,
-        1024,
-        739297484748231,
-        "randomize"
-      ]
-    },
-    {
-      "id": 4,
-      "type": "PreviewImage",
-      "pos": [
-        -2490,
-        5140
-      ],
-      "size": [
-        480,
-        420
-      ],
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 7
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 8,
-      "type": "PreviewImage",
-      "pos": [
-        -2020,
-        5680
-      ],
-      "size": [
-        490,
-        470
-      ],
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 6
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "PreviewImage"
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 6,
-      "type": "LoadImage",
-      "pos": [
-        -3150,
-        5680
-      ],
-      "size": [
-        330,
-        440
-      ],
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
+          "name": "audio",
+          "type": "AUDIO",
           "links": [
             5
           ]
         },
         {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "ComfyUI_temp_ahzay_00001_.png",
-        "image"
-      ]
-    },
-    {
-      "id": 46,
-      "type": "LoadImage",
-      "pos": [
-        -3130,
-        6310
-      ],
-      "size": [
-        330,
-        440
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            64
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "ComfyUI_temp_ahzay_00001_.png",
-        "image"
-      ]
-    },
-    {
-      "id": 9,
-      "type": "AgnesImageToVideo",
-      "pos": [
-        -2760,
-        6310
-      ],
-      "size": [
-        600,
-        450
-      ],
-      "flags": {},
-      "order": 9,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "link": 64
-        }
-      ],
-      "outputs": [
-        {
-          "name": "frames",
-          "type": "IMAGE",
-          "links": [
-            65
-          ]
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "links": [
-            66
-          ]
-        },
-        {
           "name": "fps",
           "type": "FLOAT",
           "links": [
-            67
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "AgnesImageToVideo"
-      },
-      "widgets_values": [
-        "这只猫在海边散步",
-        "Text, watermark, texture image, low quality, blurry, distorted, ugly, bad anatomy, worst quality",
-        1920,
-        768,
-        24,
-        1,
-        1100868871373392,
-        "randomize",
-        50
-      ]
-    },
-    {
-      "id": 47,
-      "type": "CreateVideo",
-      "pos": [
-        -2110,
-        6310
-      ],
-      "size": [
-        270,
-        78
-      ],
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 65
-        },
-        {
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 66
-        },
-        {
-          "name": "fps",
-          "type": "FLOAT",
-          "widget": {
-            "name": "fps"
-          },
-          "link": 67
-        }
-      ],
-      "outputs": [
-        {
-          "name": "VIDEO",
-          "type": "VIDEO",
-          "links": [
-            68
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CreateVideo"
-      },
-      "widgets_values": [
-        30
-      ]
-    },
-    {
-      "id": 48,
-      "type": "SaveVideo",
-      "pos": [
-        -1780,
-        6310
-      ],
-      "size": [
-        800,
-        760
-      ],
-      "flags": {},
-      "order": 16,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "video",
-          "type": "VIDEO",
-          "link": 68
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveVideo"
-      },
-      "widgets_values": [
-        "video/ComfyUI",
-        "mp4",
-        "h264"
-      ]
-    },
-    {
-      "id": 49,
-      "type": "SaveVideo",
-      "pos": [
-        -1820,
-        7270
-      ],
-      "size": [
-        800,
-        760
-      ],
-      "flags": {},
-      "order": 14,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "video",
-          "type": "VIDEO",
-          "link": 69
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveVideo"
-      },
-      "widgets_values": [
-        "video/ComfyUI",
-        "mp4",
-        "h264"
-      ]
-    },
-    {
-      "id": 50,
-      "type": "CreateVideo",
-      "pos": [
-        -2150,
-        7270
-      ],
-      "size": [
-        270,
-        78
-      ],
-      "flags": {},
-      "order": 10,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 70
-        },
-        {
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 71
-        },
-        {
-          "name": "fps",
-          "type": "FLOAT",
-          "widget": {
-            "name": "fps"
-          },
-          "link": 72
-        }
-      ],
-      "outputs": [
-        {
-          "name": "VIDEO",
-          "type": "VIDEO",
-          "links": [
-            69
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CreateVideo"
-      },
-      "widgets_values": [
-        30
-      ]
-    },
-    {
-      "id": 44,
-      "type": "AgnesTextToVideo",
-      "pos": [
-        -3140,
-        7270
-      ],
-      "size": [
-        950,
-        500
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "frames",
-          "type": "IMAGE",
-          "links": [
-            70
-          ]
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "links": [
-            71
-          ]
-        },
-        {
-          "name": "fps",
-          "type": "FLOAT",
-          "links": [
-            72
+            6
           ]
         }
       ],
@@ -553,115 +52,46 @@
         768,
         24,
         5,
-        1121817693610914,
+        0,
         "randomize",
         50
       ]
     },
     {
-      "id": 51,
-      "type": "SaveVideo",
+      "id": 3,
+      "type": "AgnesImageToVideo",
       "pos": [
-        -1400,
-        8260
+        40,
+        720
       ],
       "size": [
-        800,
-        760
+        400,
+        417.59375
       ],
       "flags": {},
-      "order": 15,
+      "order": 16,
       "mode": 0,
       "inputs": [
         {
-          "name": "video",
-          "type": "VIDEO",
-          "link": 73
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "Node name for S&R": "SaveVideo"
-      },
-      "widgets_values": [
-        "video/ComfyUI",
-        "mp4",
-        "h264"
-      ]
-    },
-    {
-      "id": 11,
-      "type": "AgnesMultiImageToVideo",
-      "pos": [
-        -2570,
-        8260
-      ],
-      "size": [
-        810,
-        780
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "image1",
+          "name": "image",
           "type": "IMAGE",
-          "link": 20
+          "link": 14
         },
         {
-          "name": "image2",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": 16
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 23
         },
         {
-          "name": "image3",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image4",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image5",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image6",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image7",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image8",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image9",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image10",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 24
         }
       ],
       "outputs": [
@@ -669,21 +99,108 @@
           "name": "frames",
           "type": "IMAGE",
           "links": [
-            74
+            11
           ]
         },
         {
           "name": "audio",
           "type": "AUDIO",
           "links": [
-            75
+            12
           ]
         },
         {
           "name": "fps",
           "type": "FLOAT",
           "links": [
-            76
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesImageToVideo"
+      },
+      "widgets_values": [
+        "Animate the image with subtle motion, natural movement, cinematic quality",
+        "Text, watermark, texture image, low quality, blurry, distorted, ugly, bad anatomy, worst quality",
+        1152,
+        768,
+        24,
+        5,
+        0,
+        "randomize",
+        50
+      ]
+    },
+    {
+      "id": 4,
+      "type": "AgnesMultiImageToVideo",
+      "pos": [
+        90,
+        1730
+      ],
+      "size": [
+        400,
+        447.59375
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 15
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 29
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 27
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 20
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 21
+        }
+      ],
+      "outputs": [
+        {
+          "name": "frames",
+          "type": "IMAGE",
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            10
           ]
         }
       ],
@@ -691,43 +208,221 @@
         "Node name for S&R": "AgnesMultiImageToVideo"
       },
       "widgets_values": [
-        "multi-image",
-        "10秒无缝过渡视频提示：  \n一只虎斑白猫在夕阳下漫步于沙滩，轻柔的海浪拍打岸边，温暖的金色光芒洒满整个场景。当夕阳西下，环境自然过渡为一条布满砖砌建筑的城市街道，猫咪继续稳步穿行在柏油路上，海滩元素逐渐消失，城市元素浮现，整个过渡过程中，猫咪的姿态、灯光氛围和动态流畅一致，保持完整连续。",
+        "Smoothly transition from the first keyframe to the last keyframe with natural motion. Start with the first keyframe, gradually transform through natural movement, and end at the last keyframe. Both keyframes should be equally prominent in the video.",
         "low quality, blurry, distorted, ugly, bad anatomy, worst quality",
-        1024,
+        1152,
         768,
         24,
-        10,
-        772253894558173,
-        "fixed",
+        5,
+        0,
+        "randomize",
         50
       ]
     },
     {
-      "id": 52,
-      "type": "CreateVideo",
+      "id": 5,
+      "type": "AgnesTextToImage",
       "pos": [
-        -1730,
-        8260
+        -2150,
+        -110
       ],
       "size": [
-        270,
-        78
+        400,
+        235.59375
       ],
       "flags": {},
-      "order": 11,
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesTextToImage"
+      },
+      "widgets_values": [
+        "A cinematic shot of a cat walking on the beach at sunset, soft ocean waves, warm golden lighting, realistic motion",
+        1024,
+        768,
+        0,
+        "randomize"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "AgnesImageToImage",
+      "pos": [
+        -1970,
+        810
+      ],
+      "size": [
+        400,
+        235.59375
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesImageToImage"
+      },
+      "widgets_values": [
+        "Transform the scene into a rain-soaked cyberpunk night with neon reflections while preserving the original composition",
+        1024,
+        768,
+        0,
+        "randomize"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "PreviewImage",
+      "pos": [
+        -1700,
+        -110
+      ],
+      "size": [
+        225,
+        303.59375
+      ],
+      "flags": {},
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 74
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "PreviewImage",
+      "pos": [
+        -1540,
+        810
+      ],
+      "size": [
+        540,
+        560
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 9,
+      "type": "LoadImage",
+      "pos": [
+        -2270,
+        810
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "CreateVideo",
+      "pos": [
+        40,
+        -280
+      ],
+      "size": [
+        270,
+        159.59375
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 4
         },
         {
           "name": "audio",
           "shape": 7,
           "type": "AUDIO",
-          "link": 75
+          "link": 5
         },
         {
           "name": "fps",
@@ -735,7 +430,7 @@
           "widget": {
             "name": "fps"
           },
-          "link": 76
+          "link": 6
         }
       ],
       "outputs": [
@@ -743,7 +438,7 @@
           "name": "VIDEO",
           "type": "VIDEO",
           "links": [
-            73
+            7
           ]
         }
       ],
@@ -751,228 +446,816 @@
         "Node name for S&R": "CreateVideo"
       },
       "widgets_values": [
-        30
+        30,
+        8
+      ]
+    },
+    {
+      "id": 11,
+      "type": "SaveVideo",
+      "pos": [
+        360,
+        -280
+      ],
+      "size": [
+        650,
+        691.171875
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "auto",
+        "auto"
+      ]
+    },
+    {
+      "id": 12,
+      "type": "CreateVideo",
+      "pos": [
+        490,
+        720
+      ],
+      "size": [
+        270,
+        159.59375
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 11
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 12
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30,
+        8
+      ]
+    },
+    {
+      "id": 13,
+      "type": "CreateVideo",
+      "pos": [
+        560,
+        1730
+      ],
+      "size": [
+        270,
+        159.59375
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 8
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 9
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "widget": {
+            "name": "fps"
+          },
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30,
+        8
+      ]
+    },
+    {
+      "id": 14,
+      "type": "LoadImage",
+      "pos": [
+        -550,
+        720
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            14,
+            22
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (2).png",
+        "image"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "LoadImage",
+      "pos": [
+        -570,
+        1730
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            15,
+            19
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 18,
+      "type": "SaveVideo",
+      "pos": [
+        850,
+        720
+      ],
+      "size": [
+        750,
+        780
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "auto",
+        "auto"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "SaveVideo",
+      "pos": [
+        950,
+        1730
+      ],
+      "size": [
+        870,
+        910
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "video/ComfyUI",
+        "auto",
+        "auto"
+      ]
+    },
+    {
+      "id": 20,
+      "type": "GetImageSize",
+      "pos": [
+        -220,
+        1940
+      ],
+      "size": [
+        225,
+        183.59375
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "图像",
+          "name": "image",
+          "type": "IMAGE",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "label": "宽度",
+          "name": "width",
+          "type": "INT",
+          "links": [
+            20
+          ]
+        },
+        {
+          "label": "高度",
+          "name": "height",
+          "type": "INT",
+          "links": [
+            21
+          ]
+        },
+        {
+          "name": "batch_size",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetImageSize"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 21,
+      "type": "GetImageSize",
+      "pos": [
+        -220,
+        960
+      ],
+      "size": [
+        225,
+        183.59375
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "图像",
+          "name": "image",
+          "type": "IMAGE",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "label": "宽度",
+          "name": "width",
+          "type": "INT",
+          "links": [
+            23
+          ]
+        },
+        {
+          "label": "高度",
+          "name": "height",
+          "type": "INT",
+          "links": [
+            24
+          ]
+        },
+        {
+          "name": "batch_size",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetImageSize"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 22,
+      "type": "AgnesImageToImage",
+      "pos": [
+        -1970,
+        1640
+      ],
+      "size": [
+        400,
+        235.59375
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AgnesImageToImage"
+      },
+      "widgets_values": [
+        "Transform the scene into darkness while preserving the original composition",
+        1024,
+        768,
+        0,
+        "randomize"
+      ]
+    },
+    {
+      "id": 23,
+      "type": "PreviewImage",
+      "pos": [
+        -1540,
+        1640
+      ],
+      "size": [
+        540,
+        560
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 24,
+      "type": "LoadImage",
+      "pos": [
+        -2270,
+        1640
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            25
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 25,
+      "type": "LoadImage",
+      "pos": [
+        -260,
+        2280
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            27
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (2).png",
+        "image"
+      ]
+    },
+    {
+      "id": 26,
+      "type": "LoadImage",
+      "pos": [
+        -570,
+        2270
+      ],
+      "size": [
+        270,
+        363.59375
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            29
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "pasted/image (3).png",
+        "image"
       ]
     }
   ],
   "links": [
     [
+      1,
       5,
-      6,
       0,
       7,
       0,
       "IMAGE"
     ],
     [
+      2,
       6,
-      7,
       0,
       8,
       0,
       "IMAGE"
     ],
     [
-      7,
+      3,
+      9,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ],
+    [
+      4,
+      2,
+      0,
+      10,
+      0,
+      "IMAGE"
+    ],
+    [
+      5,
+      2,
       1,
+      10,
+      1,
+      "AUDIO"
+    ],
+    [
+      6,
+      2,
+      2,
+      10,
+      2,
+      "FLOAT"
+    ],
+    [
+      7,
+      10,
+      0,
+      11,
+      0,
+      "VIDEO"
+    ],
+    [
+      8,
+      4,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      9,
+      4,
+      1,
+      13,
+      1,
+      "AUDIO"
+    ],
+    [
+      10,
+      4,
+      2,
+      13,
+      2,
+      "FLOAT"
+    ],
+    [
+      11,
+      3,
+      0,
+      12,
+      0,
+      "IMAGE"
+    ],
+    [
+      12,
+      3,
+      1,
+      12,
+      1,
+      "AUDIO"
+    ],
+    [
+      13,
+      3,
+      2,
+      12,
+      2,
+      "FLOAT"
+    ],
+    [
+      14,
+      14,
+      0,
+      3,
+      0,
+      "IMAGE"
+    ],
+    [
+      15,
+      16,
       0,
       4,
       0,
       "IMAGE"
     ],
     [
-      16,
+      17,
+      12,
+      0,
       18,
       0,
-      11,
-      1,
+      "VIDEO"
+    ],
+    [
+      18,
+      13,
+      0,
+      19,
+      0,
+      "VIDEO"
+    ],
+    [
+      19,
+      16,
+      0,
+      20,
+      0,
       "IMAGE"
     ],
     [
       20,
       20,
       0,
-      11,
+      4,
+      3,
+      "INT"
+    ],
+    [
+      21,
+      20,
+      1,
+      4,
+      4,
+      "INT"
+    ],
+    [
+      22,
+      14,
+      0,
+      21,
       0,
       "IMAGE"
     ],
     [
-      64,
-      46,
+      23,
+      21,
       0,
-      9,
+      3,
+      1,
+      "INT"
+    ],
+    [
+      24,
+      21,
+      1,
+      3,
+      2,
+      "INT"
+    ],
+    [
+      25,
+      24,
+      0,
+      22,
       0,
       "IMAGE"
     ],
     [
-      65,
-      9,
+      26,
+      22,
       0,
-      47,
-      0,
-      "IMAGE"
-    ],
-    [
-      66,
-      9,
-      1,
-      47,
-      1,
-      "AUDIO"
-    ],
-    [
-      67,
-      9,
-      2,
-      47,
-      2,
-      "FLOAT"
-    ],
-    [
-      68,
-      47,
-      0,
-      48,
-      0,
-      "VIDEO"
-    ],
-    [
-      69,
-      50,
-      0,
-      49,
-      0,
-      "VIDEO"
-    ],
-    [
-      70,
-      44,
-      0,
-      50,
+      23,
       0,
       "IMAGE"
     ],
     [
-      71,
-      44,
-      1,
-      50,
-      1,
-      "AUDIO"
-    ],
-    [
-      72,
-      44,
+      27,
+      25,
+      0,
+      4,
       2,
-      50,
-      2,
-      "FLOAT"
-    ],
-    [
-      73,
-      52,
-      0,
-      51,
-      0,
-      "VIDEO"
-    ],
-    [
-      74,
-      11,
-      0,
-      52,
-      0,
       "IMAGE"
     ],
     [
-      75,
-      11,
+      29,
+      26,
+      0,
+      4,
       1,
-      52,
-      1,
-      "AUDIO"
-    ],
-    [
-      76,
-      11,
-      2,
-      52,
-      2,
-      "FLOAT"
+      "IMAGE"
     ]
   ],
-  "groups": [
-    {
-      "id": 1,
-      "title": "文生图",
-      "bounding": [
-        -3150,
-        5070,
-        1150,
-        500
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 2,
-      "title": "图像修改",
-      "bounding": [
-        -3160,
-        5610,
-        1640,
-        550
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 3,
-      "title": "单图生视频",
-      "bounding": [
-        -3160,
-        6210,
-        2210,
-        930
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 4,
-      "title": "多图生视频",
-      "bounding": [
-        -3150,
-        8080,
-        2560,
-        1100
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    },
-    {
-      "id": 5,
-      "title": "文生视频",
-      "bounding": [
-        -3150,
-        7170,
-        2170,
-        890
-      ],
-      "color": "#3f789e",
-      "flags": {}
-    }
-  ],
+  "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6209213230591555,
+      "scale": 0.2896643797366881,
       "offset": [
-        5041.859737345992,
-        -5366.130186220606
+        4566.771451961009,
+        1577.9438736272175
       ]
     },
-    "frontendVersion": "1.45.15",
+    "frontendVersion": "1.45.20",
     "VHS_latentpreview": false,
     "VHS_latentpreviewrate": 0,
     "VHS_MetadataImage": true,
