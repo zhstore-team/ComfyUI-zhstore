@@ -105,20 +105,16 @@
   },
 	
 	 "AgnesMultiImageToVideo": {
-    "display_name": "Agnes 多图生视频",
-    "description": "使用 Agnes-Video-V2.0 模型根据多张参考图片生成视频。支持多图引导生成或关键帧动画。第一张图片必填，其余可选。",
+    "display_name": "Agnes 首尾帧生视频",
+    "description": "使用 Agnes-Video-V2.0 模型根据首帧、尾帧（可选中帧）参考图生成视频，在参考图之间产生平滑过渡动画。",
     "inputs": {
       "image1": {
-        "name": "参考图片 1",
-        "tooltip": "第一张参考图片（必选）"
-      },
-      "mode": {
-        "name": "生成模式",
-        "tooltip": "生成模式：multi-image=多图引导生成，keyframes=关键帧之间平滑过渡"
+        "name": "首帧参考图",
+        "tooltip": "首帧参考图（必填）"
       },
       "prompt": {
         "name": "正向提示词",
-        "tooltip": "描述视频生成内容，尤其描述图片之间的过渡或动作"
+        "tooltip": "描述首帧到尾帧的过渡动作，如：从A状态平滑变化到B状态"
       },
       "negative_prompt": {
         "name": "负向提示词",
@@ -149,40 +145,12 @@
         "tooltip": "推理步数"
       },
       "image2": {
-        "name": "参考图片 2",
-        "tooltip": "第二张参考图片（可选）"
+        "name": "中帧参考图",
+        "tooltip": "中帧参考图（可选）"
       },
       "image3": {
-        "name": "参考图片 3",
-        "tooltip": "第三张参考图片（可选）"
-      },
-      "image4": {
-        "name": "参考图片 4",
-        "tooltip": "第四张参考图片（可选）"
-      },
-      "image5": {
-        "name": "参考图片 5",
-        "tooltip": "第五张参考图片（可选）"
-      },
-      "image6": {
-        "name": "参考图片 6",
-        "tooltip": "第六张参考图片（可选）"
-      },
-      "image7": {
-        "name": "参考图片 7",
-        "tooltip": "第七张参考图片（可选）"
-      },
-      "image8": {
-        "name": "参考图片 8",
-        "tooltip": "第八张参考图片（可选）"
-      },
-      "image9": {
-        "name": "参考图片 9",
-        "tooltip": "第九张参考图片（可选）"
-      },
-      "image10": {
-        "name": "参考图片 10",
-        "tooltip": "第十张参考图片（可选）"
+        "name": "尾帧参考图",
+        "tooltip": "尾帧参考图（可选，需至少连1张）"
       }
     },
     "outputs": {

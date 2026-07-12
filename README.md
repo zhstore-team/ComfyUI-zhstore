@@ -7,6 +7,33 @@
 <img width="800" height="400" alt="gzh" src="https://github.com/user-attachments/assets/e126d9ea-5493-4580-8b7f-c980bf078965" />
 <br><br>
 
+## 更新说明
+
+- 由于 Agnes 官方 API 调整，原 **Agnes 多图生视频**节点已升级为 **Agnes 首尾帧生视频**节点。新节点支持首帧、中帧（可选）、尾帧参考图，用于生成首尾帧之间的平滑过渡动画。
+
+## 安装教程
+
+1. 进入 ComfyUI 的 `custom_nodes` 目录：
+```bash
+cd ComfyUI/custom_nodes
+```
+
+2. 克隆本仓库：
+```bash
+git clone https://github.com/zhstore-comfyui/ComfyUI-zhstore.git
+```
+
+3. 安装依赖（**必须步骤**）：
+```bash
+cd ComfyUI-zhstore
+pip install -r requirements.txt
+```
+
+4. 重启 ComfyUI，插件即可生效。
+
+> **注意**：Agnes AI 相关节点（文生图、图生图、文生视频、单图生视频、首尾帧生视频）需要在 ComfyUI 设置中配置 Agnes API Key 才能使用。
+
+
 ## 插件介绍
 ComfyUI-zhstore插件包，是智绘Store团队开发的一款适用于ComfyUI的节点插件包，提供了多种类型的插件，主要涵盖了以下节点：
 ### 1、判断
@@ -39,7 +66,7 @@ ComfyUI-zhstore插件包，是智绘Store团队开发的一款适用于ComfyUI�
 
 - Agnes 单图生视频
 
-- Agnes 多图生视频
+- Agnes 首尾帧生视频
 <br><br>
 
 ## 示例

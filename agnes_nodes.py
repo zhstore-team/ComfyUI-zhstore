@@ -181,54 +181,41 @@ class AgnesTextToVideo:
     def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 180, interval: float = 5.0) -> str:
         """
         轮询查询视频生成结果。
-        默认间隔3秒，总超时30分钟（180次），每分钟仅6次请求，远低于20次/分钟限制。
+        间隔5秒，总超时30分钟（180次），每分钟12次请求，符合≤20次/分钟限制。
         """
         import requests
         query_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}&model_name=agnes-video-v2.0"
         headers = {"Authorization": f"Bearer {api_key}"}
 
         from comfy.utils import ProgressBar
-        pbar = ProgressBar(max_retries)
+        pbar = ProgressBar(100)
 
         last_progress = -1
         stuck_count = 0
 
         for attempt in range(max_retries):
             try:
-                resp = requests.get(query_url, headers=headers, timeout=(5, 15))  # 连接5秒，读取15秒
+                resp = requests.get(query_url, headers=headers, timeout=(5, 15))
                 resp.raise_for_status()
                 result = resp.json()
                 status = result.get("status")
                 progress = result.get("progress", 0)
-                pbar.update_absolute(attempt, max_retries)
 
-                # 美化状态显示
-                display_status = status
-                if status == "queued":
-                    display_status = "排队中"
-                elif status == "in_progress":
-                    display_status = "视频生成中"
-                elif status == "processing":
-                    display_status = "处理中"
-                elif status == "completed":
-                    display_status = "已完成"
-                elif status == "failed":
-                    display_status = "失败"
+                # 用 API 返回的实际进度更新进度条（0~100）
+                pbar.update_absolute(progress)
 
-                print(f"[Agnes] 状态: {display_status}, 进度: {progress}%")
-
-                # 进度卡死检测（可选，防止无限等待）
+                # 进度卡死检测
                 if progress == last_progress and status in ["in_progress", "processing"]:
                     stuck_count += 1
-                    if stuck_count >= 10:  # 连续10次，进度不变，视为异常
+                    if stuck_count >= 10:
                         print(f"[Agnes] 警告: 进度停滞在 {progress}% 超过10次，继续等待...")
-                        # 不抛出异常，继续等待，但重置计数器避免频繁打印
                         stuck_count = 0
                 else:
                     last_progress = progress
                     stuck_count = 0
 
                 if status == "completed":
+                    print(f"[Agnes] 视频生成完成，进度: {progress}%")
                     video_url = result.get("remixed_from_video_id")
                     if not video_url:
                         video_url = result.get("video_url") or result.get("url")
@@ -238,10 +225,9 @@ class AgnesTextToVideo:
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
                     raise RuntimeError(f"视频生成失败: {error_msg}")
-                elif status in ["queued", "in_progress", "processing"]:
-                    time.sleep(interval)
                 else:
-                    # 未知状态，仍等待
+                    # queued / in_progress / processing / 未知状态
+                    print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
                 print(f"[Agnes] 查询出错: {e}, 重试中...")
@@ -447,6 +433,12 @@ class AgnesImageToVideo:
         if not api_key:
             raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
 
+        # 检查图片尺寸，超限则报错（用最后两个维度取宽高，兼容不同张量形状）
+        img_h, img_w = image.shape[-2], image.shape[-1]
+        MAX_SIDE = 2048
+        if max(img_w, img_h) > MAX_SIDE:
+            raise ValueError(f"上传图像尺寸过大（{img_w}x{img_h}），请调整图像尺寸。建议最大边长不超过{MAX_SIDE}像素。")
+
         # 将输入图像转换为纯 Base64 字符串（无前缀）
         image_base64 = self._image_to_base64(image)
         print(f"[Agnes] 图像已转换为 Base64 (长度: {len(image_base64)})")
@@ -557,7 +549,7 @@ class AgnesImageToVideo:
         headers = {"Authorization": f"Bearer {api_key}"}
 
         from comfy.utils import ProgressBar
-        pbar = ProgressBar(max_retries)
+        pbar = ProgressBar(100)
 
         last_progress = -1
         stuck_count = 0
@@ -569,21 +561,9 @@ class AgnesImageToVideo:
                 result = resp.json()
                 status = result.get("status")
                 progress = result.get("progress", 0)
-                pbar.update_absolute(attempt, max_retries)
 
-                display_status = status
-                if status == "queued":
-                    display_status = "排队中"
-                elif status == "in_progress":
-                    display_status = "视频生成中"
-                elif status == "processing":
-                    display_status = "处理中"
-                elif status == "completed":
-                    display_status = "已完成"
-                elif status == "failed":
-                    display_status = "失败"
-
-                print(f"[Agnes] 状态: {display_status}, 进度: {progress}%")
+                # 用 API 返回的实际进度更新进度条（0~100）
+                pbar.update_absolute(progress)
 
                 if progress == last_progress and status in ["in_progress", "processing"]:
                     stuck_count += 1
@@ -595,6 +575,7 @@ class AgnesImageToVideo:
                     stuck_count = 0
 
                 if status == "completed":
+                    print(f"[Agnes] 视频生成完成，进度: {progress}%")
                     video_url = result.get("remixed_from_video_id")
                     if not video_url:
                         video_url = result.get("video_url") or result.get("url")
@@ -604,9 +585,8 @@ class AgnesImageToVideo:
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
                     raise RuntimeError(f"视频生成失败: {error_msg}")
-                elif status in ["queued", "in_progress", "processing"]:
-                    time.sleep(interval)
                 else:
+                    print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
                 print(f"[Agnes] 查询出错: {e}, 重试中...")
@@ -721,15 +701,11 @@ class AgnesMultiImageToVideo:
     def INPUT_TYPES(cls):
         inputs = {
             "required": {
-                "image1": ("IMAGE", {"tooltip": "第一张参考图片（必选）"}),
-                "mode": (["multi-image", "keyframes"], {
-                    "default": "multi-image",
-                    "tooltip": "生成模式：multi-image=多图引导生成，keyframes=关键帧之间平滑过渡"
-                }),
+                "image1": ("IMAGE", {"tooltip": "首帧参考图（必填）"}),
                 "prompt": ("STRING", {
                     "multiline": True,
-                    "default": "Create a smooth transformation between the reference images, maintaining visual consistency and natural motion",
-                    "tooltip": "描述视频生成内容，尤其描述图片之间的过渡或动作"
+                    "default": "Smoothly transition from the first keyframe to the last keyframe with natural motion. Start with the first keyframe, gradually transform through natural movement, and end at the last keyframe. Both keyframes should be equally prominent in the video.",
+                    "tooltip": "描述首帧到尾帧的过渡动作，如：从A状态平滑变化到B状态"
                 }),
                 "negative_prompt": ("STRING", {
                     "multiline": True,
@@ -779,15 +755,8 @@ class AgnesMultiImageToVideo:
                     "step": 1,
                     "tooltip": "推理步数"
                 }),
-                "image2": ("IMAGE", {"tooltip": "第二张参考图片（可选）"}),
-                "image3": ("IMAGE", {"tooltip": "第三张参考图片（可选）"}),
-                "image4": ("IMAGE", {"tooltip": "第四张参考图片（可选）"}),
-                "image5": ("IMAGE", {"tooltip": "第五张参考图片（可选）"}),
-                "image6": ("IMAGE", {"tooltip": "第六张参考图片（可选）"}),
-                "image7": ("IMAGE", {"tooltip": "第七张参考图片（可选）"}),
-                "image8": ("IMAGE", {"tooltip": "第八张参考图片（可选）"}),
-                "image9": ("IMAGE", {"tooltip": "第九张参考图片（可选）"}),
-                "image10": ("IMAGE", {"tooltip": "第十张参考图片（可选）"}),
+                "image2": ("IMAGE", {"tooltip": "中帧参考图（可选）"}),
+                "image3": ("IMAGE", {"tooltip": "尾帧参考图（可选，需至少连1张）"}),
             }
         }
         return inputs
@@ -796,30 +765,40 @@ class AgnesMultiImageToVideo:
     RETURN_NAMES = ("frames", "audio", "fps")
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
-    DESCRIPTION = "使用Agnes-Video-V2.0根据多张参考图片生成视频。支持多图引导生成或关键帧动画。第1张图片必填，其余可选。"
+    DESCRIPTION = "使用Agnes-Video-V2.0根据首帧、尾帧（可选中帧）参考图生成视频，在参考图之间产生平滑过渡动画。"
 
-    def generate_video(self, image1: torch.Tensor, mode: str, prompt: str, negative_prompt: str,
+    def generate_video(self, image1: torch.Tensor, prompt: str, negative_prompt: str,
                        width: int, height: int, frame_rate: float, duration_seconds: float,
                        seed: int, num_inference_steps: int = 50,
-                       image2=None, image3=None, image4=None, image5=None,
-                       image6=None, image7=None, image8=None, image9=None, image10=None) -> Tuple[torch.Tensor, Optional[Dict], float]:
+                       image2=None, image3=None) -> Tuple[torch.Tensor, Optional[Dict], float]:
         api_key = get_api_key()
         if not api_key:
             raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
 
-        # 收集所有非空图像，顺序为 image1, image2, ..., image10
-        images = [image1]
-        for img in [image2, image3, image4, image5, image6, image7, image8, image9, image10]:
+        # 收集非空图像
+        image_list = [image1]
+        for img in [image2, image3]:
             if img is not None:
-                images.append(img)
+                image_list.append(img)
 
-        if len(images) < 2 and mode == "keyframes":
-            print("[Agnes] 关键帧模式至少需要2张图片，当前只有1张，将使用多图模式")
-            mode = "multi-image"
+        # 限制最多3张（API限制）
+        if len(image_list) > 3:
+            print(f"[Agnes] 警告：API最多支持3张参考图，已截取前3张（共收到{len(image_list)}张）")
+            image_list = image_list[:3]
 
-        # 将图像列表转换为 Base64 字符串列表
-        image_base64_list = [self._image_to_base64(img) for img in images]
-        print(f"[Agnes] 已转换 {len(image_base64_list)} 张图片为 Base64")
+        if len(image_list) < 2:
+            raise ValueError(f"至少需要首帧和尾帧2张参考图，当前只有{len(image_list)}张。如只需1张图，请使用「Agnes 单图生视频」节点。")
+
+        # 检查图片尺寸，超限则报错（用最后两个维度取宽高，兼容不同张量形状）
+        MAX_SIDE = 2048
+        for i, img in enumerate(image_list):
+            h, w = img.shape[-2], img.shape[-1]
+            if max(w, h) > MAX_SIDE:
+                raise ValueError(f"上传图像尺寸过大（{w}x{h}），请调整图像尺寸。建议最大边长不超过{MAX_SIDE}像素。")
+
+        # 将图像列表转换为 Base64 列表
+        image_base64_list = [self._image_to_base64(img) for img in image_list]
+        print(f"[Agnes] 已转换 {len(image_base64_list)} 张参考图为 Base64")
 
         num_frames = duration_to_frames(duration_seconds, frame_rate)
         actual_duration = num_frames / frame_rate
@@ -830,10 +809,11 @@ class AgnesMultiImageToVideo:
         create_url = "https://apihub.agnes-ai.com/v1/videos"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-        # 构建 extra_body
-        extra_body = {"image": image_base64_list}
-        if mode == "keyframes":
-            extra_body["mode"] = "keyframes"
+        # 按官方文档：关键帧模式使用 extra_body.image（URL 数组）+ mode=keyframes
+        extra_body = {
+            "image": image_base64_list,
+            "mode": "keyframes",
+        }
 
         payload = {
             "model": "agnes-video-v2.0",
@@ -845,7 +825,7 @@ class AgnesMultiImageToVideo:
             "num_frames": num_frames,
             "frame_rate": frame_rate,
             "num_inference_steps": num_inference_steps,
-            "seed":seed
+            "seed": seed,
         }
         # if seed != -1:
             # payload["seed"] = seed
@@ -858,7 +838,14 @@ class AgnesMultiImageToVideo:
         except requests.exceptions.Timeout:
             raise RuntimeError("创建任务超时（180秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"创建任务失败: {str(e)}")
+            # 输出 API 返回的详细错误信息
+            error_detail = ""
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = f" | 响应: {e.response.text[:500]}"
+                except:
+                    pass
+            raise RuntimeError(f"创建任务失败: {str(e)}{error_detail}")
 
         video_id = task_data.get("video_id")
         if not video_id:
@@ -880,7 +867,7 @@ class AgnesMultiImageToVideo:
         return frames_tensor, audio_data, float(frame_rate)
 
     def _image_to_base64(self, image_tensor: torch.Tensor) -> str:
-        """将 ComfyUI 图像 Tensor 转换为纯 Base64 字符串（无 data URL 前缀）"""
+        """将 ComfyUI 图像 Tensor 转换为纯 Base64 字符串"""
         import base64
         from io import BytesIO
 
@@ -904,7 +891,7 @@ class AgnesMultiImageToVideo:
         headers = {"Authorization": f"Bearer {api_key}"}
 
         from comfy.utils import ProgressBar
-        pbar = ProgressBar(max_retries)
+        pbar = ProgressBar(100)
 
         last_progress = -1
         stuck_count = 0
@@ -916,21 +903,9 @@ class AgnesMultiImageToVideo:
                 result = resp.json()
                 status = result.get("status")
                 progress = result.get("progress", 0)
-                pbar.update_absolute(attempt, max_retries)
 
-                display_status = status
-                if status == "queued":
-                    display_status = "排队中"
-                elif status == "in_progress":
-                    display_status = "视频生成中"
-                elif status == "processing":
-                    display_status = "处理中"
-                elif status == "completed":
-                    display_status = "已完成"
-                elif status == "failed":
-                    display_status = "失败"
-
-                print(f"[Agnes] 状态: {display_status}, 进度: {progress}%")
+                # 用 API 返回的实际进度更新进度条（0~100）
+                pbar.update_absolute(progress)
 
                 if progress == last_progress and status in ["in_progress", "processing"]:
                     stuck_count += 1
@@ -942,6 +917,7 @@ class AgnesMultiImageToVideo:
                     stuck_count = 0
 
                 if status == "completed":
+                    print(f"[Agnes] 视频生成完成，进度: {progress}%")
                     video_url = result.get("remixed_from_video_id")
                     if not video_url:
                         video_url = result.get("video_url") or result.get("url")
@@ -951,9 +927,8 @@ class AgnesMultiImageToVideo:
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
                     raise RuntimeError(f"视频生成失败: {error_msg}")
-                elif status in ["queued", "in_progress", "processing"]:
-                    time.sleep(interval)
                 else:
+                    print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
                 print(f"[Agnes] 查询出错: {e}, 重试中...")
@@ -1488,7 +1463,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "AgnesTextToVideo": "Agnes 文生视频",
     "AgnesImageToVideo": "Agnes 单图生视频",
-    "AgnesMultiImageToVideo": "Agnes 多图生视频",
+    "AgnesMultiImageToVideo": "Agnes 首尾帧生视频",
     "AgnesTextToImage": "Agnes 文生图",
     "AgnesImageToImage": "Agnes 图生图",
     # "AgnesMultiImageToImage": "Agnes 多图编辑",
