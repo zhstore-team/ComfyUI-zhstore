@@ -51,13 +51,17 @@
       }
     }
   },
-	  "AgnesImageToVideo": {
+  "AgnesImageToVideo": {
     "display_name": "Agnes 单图生视频",
     "description": "使用 Agnes-Video-V2.0 模型上传的图像生成视频。通过时长（秒）控制视频长度，自动适配 API 帧数约束。需在 ComfyUI 设置中配置 API Key。",
     "inputs": {
+      "image": {
+        "name": "图像",
+        "tooltip": "输入的单张图片，将用于生成动画视频"
+      },
       "prompt": {
         "name": "正向提示词",
-        "tooltip": "视频内容的文本描述"
+        "tooltip": "描述图片中需要动画化的内容，例如角色动作、镜头运动等"
       },
       "negative_prompt": {
         "name": "负向提示词",
@@ -103,8 +107,7 @@
       }
     }
   },
-	
-	 "AgnesMultiImageToVideo": {
+  "AgnesMultiImageToVideo": {
     "display_name": "Agnes 首尾帧生视频",
     "description": "使用 Agnes-Video-V2.0 模型根据首帧、尾帧（可选中帧）参考图生成视频，在参考图之间产生平滑过渡动画。",
     "inputs": {
@@ -168,7 +171,174 @@
       }
     }
   },
-	
+  "AgnesTextToImage": {
+    "display_name": "Agnes 文生图",
+    "description": "使用 Agnes-Image-2.1-Flash 根据文本生成图像。需要先在 ComfyUI 设置中配置 Agnes 的 API Key。",
+    "inputs": {
+      "prompt": {
+        "name": "正向提示词",
+        "tooltip": "图像内容的文本描述"
+      },
+      "width": {
+        "name": "宽度",
+        "tooltip": "图像宽度（像素）"
+      },
+      "height": {
+        "name": "高度",
+        "tooltip": "图像高度（像素）"
+      },
+      "seed": {
+        "name": "随机种子",
+        "tooltip": "随机种子"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像",
+        "tooltip": "生成的图像张量，形状 [1, H, W, C]，值范围 0~1"
+      }
+    }
+  },
+  "AgnesImageToImage": {
+    "display_name": "Agnes 图生图",
+    "description": "使用 Agnes-Image-2.1-Flash 根据输入图像和提示词生成新图像（图生图）。需要配置 API Key。",
+    "inputs": {
+      "image": {
+        "name": "图像",
+        "tooltip": "输入图像，将作为参考进行编辑或转换"
+      },
+      "prompt": {
+        "name": "正向提示词",
+        "tooltip": "描述需要如何修改图像，例如风格转换、添加元素等"
+      },
+      "width": {
+        "name": "宽度",
+        "tooltip": "输出图像宽度（像素）"
+      },
+      "height": {
+        "name": "高度",
+        "tooltip": "输出图像高度（像素）"
+      },
+      "seed": {
+        "name": "随机种子",
+        "tooltip": "随机种子"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像",
+        "tooltip": "生成的图像张量，形状 [1, H, W, C]，值范围 0~1"
+      }
+    }
+  },
+  "AgnesChat": {
+    "display_name": "Agnes 文本对话",
+    "description": "Agnes 文本对话节点：支持选择模型、连续对话、流式输出。",
+    "inputs": {
+      "model": {
+        "name": "模型",
+        "tooltip": "选择文本模型，2.5 为最新升级版"
+      },
+      "user_prompt": {
+        "name": "用户提示词",
+        "tooltip": "在此输入您的问题"
+      },
+      "thinking_enabled": {
+        "name": "思考模式",
+        "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
+      },
+      "max_tokens": {
+        "name": "最大 Token",
+        "tooltip": "最大生成 Token 数量"
+      },
+      "temperature": {
+        "name": "温度",
+        "tooltip": "控制输出随机性，值越低结果越确定"
+      },
+      "memory_enabled": {
+        "name": "对话记忆",
+        "tooltip": "启用后保留对话上下文，支持连续多轮对话。关闭后每次对话独立"
+      },
+      "system_prompt": {
+        "name": "系统提示词",
+        "tooltip": "可选的系统提示词，从输入端口接入"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "回复",
+        "tooltip": "最新一条回复文本"
+      },
+      "1": {
+        "name": "对话历史",
+        "tooltip": "格式化后的完整对话历史，包含用户与助手的全部交互"
+      }
+    }
+  },
+  "AgnesVisionChat": {
+    "display_name": "Agnes 图像理解对话",
+    "description": "Agnes 图像理解：支持上传图像进行视觉问答、图像描述等。需要 agnes-2.5-flash 模型。「回复」端口输出最新回复，「对话历史」端口输出格式化后的完整对话。",
+    "inputs": {
+      "model": {
+        "name": "模型",
+        "tooltip": "选择文本模型，2.5 支持多模态输入（图像+文本）"
+      },
+      "user_prompt": {
+        "name": "用户提示词",
+        "tooltip": "在此输入您的问题（可结合图像提问）"
+      },
+      "thinking_enabled": {
+        "name": "思考模式",
+        "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
+      },
+      "max_tokens": {
+        "name": "最大 Token",
+        "tooltip": "最大生成 Token 数量"
+      },
+      "temperature": {
+        "name": "温度",
+        "tooltip": "控制输出随机性，值越低结果越确定"
+      },
+      "memory_enabled": {
+        "name": "对话记忆",
+        "tooltip": "启用后保留对话上下文，支持连续多轮对话。关闭后每次对话独立"
+      },
+      "images": {
+        "name": "图像",
+        "tooltip": "输入图像（可选），支持多张图像组成的批次"
+      },
+      "system_prompt": {
+        "name": "系统提示词",
+        "tooltip": "可选的系统提示词，从输入端口接入"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "回复",
+        "tooltip": "最新一条回复文本"
+      },
+      "1": {
+        "name": "对话历史",
+        "tooltip": "格式化后的完整对话历史，包含用户与助手的全部交互"
+      }
+    }
+  },
+  "AgnesAssistantExpert": {
+    "display_name": "Agnes 助手专家",
+    "description": "Agnes 助手专家节点：提供预设的系统提示词，用于引导文本对话和图像理解对话节点的行为。",
+    "inputs": {
+      "assistant": {
+        "name": "助手角色",
+        "tooltip": "选择智能助手角色，获取对应的系统提示词"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "系统提示词",
+        "tooltip": "选定助手角色的系统提示词文本"
+      }
+    }
+  },
   "LoadImageToBase64": {
     "display_name": "Base64 编码（加载图像）",
     "description": "加载本地图像，可选尺寸处理，输出 PNG 格式的 Base64 编码字符串。",
@@ -193,20 +363,296 @@
       }
     }
   },
-	"EncodeBase64": {
-		"display_name": "Base64 编码（图像转）",
-		"description": "将输入的图像张量编码为 PNG 格式的 Base64 字符串。",
-		"inputs": {
-			"image": {
-				"name": "图像",
-				"tooltip": "待编码的图像张量，形状 [B, H, W, C]，值范围 0~1"
-			}
-		},
-		"outputs": {
-			"0": {
-				"name": "Base64字符串",
-				"tooltip": "PNG 格式的 Base64 编码字符串（不含 data:image/png;base64, 前缀）"
-			}
-		}
-	}
+  "DecodeBase64": {
+    "display_name": "Base64 解码",
+    "description": "将 Base64 编码的 PNG 图像数据解码为图像张量，支持节点内预览。",
+    "inputs": {
+      "base64_data": {
+        "name": "Base64 数据",
+        "tooltip": "PNG 格式的 Base64 编码字符串（不含 data:image/png;base64, 前缀）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图像",
+        "tooltip": "解码后的图像张量，形状 [1, H, W, C]，值范围 0~1"
+      }
+    }
+  },
+  "EncodeBase64": {
+    "display_name": "Base64 编码（图像转）",
+    "description": "将输入的图像张量编码为 PNG 格式的 Base64 字符串。",
+    "inputs": {
+      "image": {
+        "name": "图像",
+        "tooltip": "待编码的图像张量，形状 [B, H, W, C]，值范围 0~1"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Base64字符串",
+        "tooltip": "PNG 格式的 Base64 编码字符串（不含 data:image/png;base64, 前缀）"
+      }
+    }
+  },
+  "BooleanSwitch": {
+    "display_name": "布尔选择输出",
+    "description": "根据布尔开关选择输出：当开关为 True 时输出「真」输入端的数据，为 False 时输出「假」输入端的数据。",
+    "inputs": {
+      "布尔": {
+        "name": "布尔开关",
+        "tooltip": "布尔开关，True 输出「真」端，False 输出「假」端"
+      },
+      "真": {
+        "name": "真",
+        "tooltip": "开关为 True 时输出的数据（可选，未连线时默认为 None）"
+      },
+      "假": {
+        "name": "假",
+        "tooltip": "开关为 False 时输出的数据（可选，未连线时默认为 None）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "输出",
+        "tooltip": "根据布尔开关选中的数据"
+      }
+    }
+  },
+  "ValueEqualityChecker": {
+    "display_name": "输入比较器",
+    "description": "比较任意输入值与预设字符串是否相等，匹配输出 true，不匹配输出 false。",
+    "inputs": {
+      "比较值": {
+        "name": "比较值",
+        "tooltip": "用于比较的预设字符串值"
+      },
+      "任何输入": {
+        "name": "任何输入",
+        "tooltip": "任意类型的输入值，将转换为字符串进行比较（可选，未连线时视为空字符串）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "布尔",
+        "tooltip": "比较结果：匹配为 true，不匹配为 false"
+      }
+    }
+  },
+  "TextCombiner": {
+    "display_name": "文本组合",
+    "description": "将最多 5 个文本参数拼接成一个字符串，自动忽略空值。未开启换行时使用分隔符拼接；开启换行时每个非空文本后都加上分隔符和换行符。",
+    "inputs": {
+      "文本1": {
+        "name": "文本1",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本2": {
+        "name": "文本2",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本3": {
+        "name": "文本3",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本4": {
+        "name": "文本4",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本5": {
+        "name": "文本5",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "分隔符": {
+        "name": "分隔符",
+        "tooltip": "文本之间的分隔符"
+      },
+      "换行": {
+        "name": "换行模式",
+        "tooltip": "开启后每个非空文本后都加上分隔符和换行符（含末行）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "文本",
+        "tooltip": "拼接后的完整文本字符串"
+      }
+    }
+  },
+  "TextCombiner10": {
+    "display_name": "文本组合（10行文本）",
+    "description": "将最多 10 个文本参数拼接成一个字符串，自动忽略空值。未开启换行时使用分隔符拼接；开启换行时每个非空文本后都加上分隔符和换行符。",
+    "inputs": {
+      "文本1": {
+        "name": "文本1",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本2": {
+        "name": "文本2",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本3": {
+        "name": "文本3",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本4": {
+        "name": "文本4",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本5": {
+        "name": "文本5",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本6": {
+        "name": "文本6",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本7": {
+        "name": "文本7",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本8": {
+        "name": "文本8",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本9": {
+        "name": "文本9",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "文本10": {
+        "name": "文本10",
+        "tooltip": "要拼接的文本内容（自动忽略空值）"
+      },
+      "分隔符": {
+        "name": "分隔符",
+        "tooltip": "文本之间的分隔符"
+      },
+      "换行": {
+        "name": "换行模式",
+        "tooltip": "开启后每个非空文本后都加上分隔符和换行符（含末行）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "文本",
+        "tooltip": "拼接后的完整文本字符串"
+      }
+    }
+  },
+  "GroupByenable": {
+    "display_name": "分组启用开关",
+    "description": "控制所在分组内所有节点的启用/旁路状态。实际逻辑由前端 JavaScript 完成。",
+    "inputs": {
+      "启用分组": {
+        "name": "启用分组",
+        "tooltip": "控制分组内所有节点的启用/禁用状态"
+      }
+    }
+  },
+  "GroupBypass": {
+    "display_name": "分组绕过开关",
+    "description": "控制所在分组内所有节点进入 bypass（绕过/紫色）状态。实际逻辑由前端 JavaScript 完成。",
+    "inputs": {
+      "绕过分组": {
+        "name": "绕过分组",
+        "tooltip": "将分组内所有节点设为绕过（Bypass）状态"
+      }
+    }
+  },
+  "ImageResolutionPreset": {
+    "display_name": "尺寸预选节点",
+    "description": "通过下拉菜单选择预设分辨率，输出宽度和高度。支持 1:1、3:4、4:3、2:3、3:2、4:7、7:4、9:16、16:9 等多种比例。",
+    "inputs": {
+      "预设尺寸": {
+        "name": "预设尺寸",
+        "tooltip": "从下拉列表中选择预设的分辨率尺寸"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "宽度",
+        "tooltip": "预设宽度值（像素）"
+      },
+      "1": {
+        "name": "高度",
+        "tooltip": "预设高度值（像素）"
+      }
+    }
+  },
+  "ImageOrientationDetector": {
+    "display_name": "图像方向检测器",
+    "description": "判断输入图像是竖版还是横版，并根据方向输出对应的预设尺寸参数。",
+    "inputs": {
+      "图像": {
+        "name": "图像",
+        "tooltip": "输入图像张量"
+      },
+      "宽高比阈值": {
+        "name": "宽高比阈值",
+        "tooltip": "判断图像方向的宽高比阈值，默认保持1即可"
+      },
+      "方形宽度": {
+        "name": "方形宽度",
+        "tooltip": "当图像为方形时宽度端口输出的参数"
+      },
+      "方形高度": {
+        "name": "方形高度",
+        "tooltip": "当图像为方形时高度端口输出的参数"
+      },
+      "横版宽度": {
+        "name": "横版宽度",
+        "tooltip": "当图像为横版时宽度端口输出的参数"
+      },
+      "横版高度": {
+        "name": "横版高度",
+        "tooltip": "当图像为横版时高度端口输出的参数"
+      },
+      "竖版宽度": {
+        "name": "竖版宽度",
+        "tooltip": "当图像为竖版时宽度端口输出的参数"
+      },
+      "竖版高度": {
+        "name": "竖版高度",
+        "tooltip": "当图像为竖版时高度端口输出的参数"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "方向",
+        "tooltip": "图像方向：横版/竖版/方形"
+      },
+      "1": {
+        "name": "是否横版",
+        "tooltip": "True 表示横版，False 表示竖版或方形"
+      },
+      "2": {
+        "name": "宽度",
+        "tooltip": "根据方向选择的输出宽度值（像素）"
+      },
+      "3": {
+        "name": "高度",
+        "tooltip": "根据方向选择的输出高度值（像素）"
+      }
+    }
+  },
+  "ShowTextByPerpetual": {
+    "display_name": "显示文本（持久化）",
+    "description": "显示输入文本并在工作流中持久化保存。文本内容会随工作流一起保存和加载。",
+    "inputs": {
+      "text": {
+        "name": "文本",
+        "tooltip": "要显示和持久化的文本内容"
+      }
+    }
+  },
+  "MarkdownViewer": {
+    "display_name": "Markdown 文档预览",
+    "description": "将 Markdown 文本解析为富文本并在节点内预览显示，支持标题、表格、列表、代码块等。",
+    "inputs": {
+      "markdown": {
+        "name": "Markdown 文本",
+        "tooltip": "要预览的 Markdown 格式文本，支持标题、表格、列表、代码块、加粗、斜体等语法"
+      }
+    }
+  }
 }

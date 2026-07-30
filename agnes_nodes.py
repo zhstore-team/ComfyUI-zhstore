@@ -6,6 +6,12 @@ import tempfile
 import subprocess
 import shutil
 from typing import Dict, Tuple, Optional
+
+# API 配置
+BASE_URL = "https://api.agnes-ai.cn"
+
+# 模块级对话历史存储（按 node_id 索引，同一 ComfyUI 会话内持续有效）
+_chat_history_store: Dict[str, list] = {}
 import torch
 import numpy as np
 from PIL import Image
@@ -37,6 +43,84 @@ def load_agnes_config() -> Dict:
 def get_api_key() -> Optional[str]:
     config = load_agnes_config()
     return config.get("api_key", "")
+
+
+def _save_chat_history_to_workflow(history, unique_id, extra_pnginfo, key_suffix=""):
+    """将对话历史序列化保存到 workflow 节点数据中，实现工作流持久化"""
+    if unique_id is None or extra_pnginfo is None:
+        return
+    try:
+        workflow = extra_pnginfo[0]["workflow"]
+        node = next((x for x in workflow["nodes"] if str(x["id"]) == str(unique_id[0])), None)
+        if node:
+            storage_key = f"_agnes_chat_history{key_suffix}"
+            # 保存到 properties（工作流保存时会被序列化到 JSON）
+            props = node.get("properties", {})
+            props[storage_key] = json.dumps(history, ensure_ascii=False)
+            node["properties"] = props
+    except Exception:
+        pass
+
+def _load_chat_history_from_workflow(unique_id, extra_pnginfo, key_suffix=""):
+    """从 workflow 节点数据中恢复对话历史"""
+    if unique_id is None or extra_pnginfo is None:
+        return None
+    try:
+        workflow = extra_pnginfo[0]["workflow"]
+        node = next((x for x in workflow["nodes"] if str(x["id"]) == str(unique_id[0])), None)
+        if node:
+            storage_key = f"_agnes_chat_history{key_suffix}"
+            # 优先从 properties 读取（保存时写入的位置）
+            props = node.get("properties", {})
+            data = props.get(storage_key) or node.get(storage_key)
+            if data:
+                return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+def _strip_images_from_history(history):
+    """去除对话历史中的图片数据 URI，仅保留文本内容用于持久化存储"""
+    stripped = []
+    for msg in history:
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            text_parts = [item["text"] for item in content if isinstance(item, dict) and item.get("type") == "text"]
+            new_content = " ".join(text_parts) if text_parts else "[图像]"
+            stripped.append({"role": msg["role"], "content": new_content})
+        else:
+            stripped.append(msg)
+    return stripped
+
+
+def _get_api_error(status_code: Optional[int], response_body: str = "") -> str:
+    """根据 HTTP 状态码返回中文错误说明"""
+    error_map = {
+        400: "请求参数错误，请检查输入参数是否正确",
+        401: "API Key 无效或未授权，请在设置中检查您的 Agnes API Key",
+        402: "账户余额不足，请充值后重试",
+        403: "无权访问该资源，请检查 API Key 权限",
+        404: "请求的资源或接口不存在，请检查请求地址",
+        405: "请求方法不允许",
+        408: "请求超时，请检查网络连接",
+        409: "请求冲突，请稍后重试",
+        413: "请求数据过大，请减小输入尺寸或内容",
+        415: "不支持的媒体类型",
+        422: "请求参数校验失败，请检查输入参数格式",
+        429: "请求过于频繁，请稍后重试",
+        498: "API Key 无效或已过期",
+        499: "请求已关闭（客户端断开连接）",
+        500: "服务器内部错误，请稍后重试",
+        502: "网关错误，请稍后重试",
+        503: "服务暂不可用，请稍后重试",
+        504: "网关超时，请稍后重试",
+    }
+    msg = error_map.get(status_code, f"HTTP 状态码 {status_code}") if status_code else "网络请求失败，请检查网络连接"
+    if response_body:
+        # 截断过长的响应体
+        body = response_body[:600]
+        return f"{msg}\n\n响应详情：{body}"
+    return msg
 
 # 有效帧数
 VALID_NUM_FRAMES = [81, 121, 161, 201, 241, 281, 321, 361, 401, 441]
@@ -131,8 +215,12 @@ class AgnesTextToVideo:
 
         import requests
 
-        create_url = "https://apihub.agnes-ai.com/v1/videos"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        create_url = f"{BASE_URL}/v1/videos"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
         payload = {
             "model": "agnes-video-v2.0",
             "prompt": prompt,
@@ -157,11 +245,14 @@ class AgnesTextToVideo:
         except requests.exceptions.Timeout:
             raise RuntimeError(f"创建任务超时（180秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"创建任务失败: {str(e)}")
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"创建任务失败：{error_msg}")
 
         video_id = task_data.get("video_id")
         if not video_id:
-            raise RuntimeError(f"创建任务响应中没有video_id: {task_data}")
+            raise RuntimeError(f"创建任务响应中没有 video_id：{str(task_data)[:300]}")
 
         print(f"[Agnes] 任务已创建，video_id: {video_id}")
 
@@ -181,11 +272,14 @@ class AgnesTextToVideo:
     def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 180, interval: float = 5.0) -> str:
         """
         轮询查询视频生成结果。
-        间隔5秒，总超时30分钟（180次），每分钟12次请求，符合≤20次/分钟限制。
+        间隔5秒，总超时30分钟（180次），每分钟12次请求，符合≤20次/分钟的限制。
         """
         import requests
-        query_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}&model_name=agnes-video-v2.0"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        query_url = f"{BASE_URL}/agnesapi?video_id={video_id}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
 
         from comfy.utils import ProgressBar
         pbar = ProgressBar(100)
@@ -205,7 +299,7 @@ class AgnesTextToVideo:
                 pbar.update_absolute(progress)
 
                 # 进度卡死检测
-                if progress == last_progress and status in ["in_progress", "processing"]:
+                if progress == last_progress and status == "in_progress":
                     stuck_count += 1
                     if stuck_count >= 10:
                         print(f"[Agnes] 警告: 进度停滞在 {progress}% 超过10次，继续等待...")
@@ -214,23 +308,24 @@ class AgnesTextToVideo:
                     last_progress = progress
                     stuck_count = 0
 
-                if status == "completed":
+                if status == "completed" or result.get("internal_status") == "completed":
                     print(f"[Agnes] 视频生成完成，进度: {progress}%")
-                    video_url = result.get("remixed_from_video_id")
+                    video_url = result.get("url")
                     if not video_url:
-                        video_url = result.get("video_url") or result.get("url")
+                        metadata = result.get("metadata", {}) or {}
+                        video_url = metadata.get("url")
                     if not video_url:
-                        raise RuntimeError(f"任务完成但未找到视频URL: {result}")
+                        raise RuntimeError(f"任务完成但未找到视频URL：{str(result)[:300]}")
                     return video_url
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
-                    raise RuntimeError(f"视频生成失败: {error_msg}")
+                    raise RuntimeError(f"视频生成失败，原因：{error_msg}")
                 else:
                     # queued / in_progress / processing / 未知状态
                     print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
-                print(f"[Agnes] 查询出错: {e}, 重试中...")
+                print(f"[Agnes] 查询出错（HTTP {e.response.status_code if (hasattr(e, 'response') and e.response is not None) else 'N/A'}）: {e}, 重试中...")
                 time.sleep(interval)
         raise RuntimeError(f"视频生成超时（已等待 {max_retries * interval} 秒），video_id: {video_id}")
 
@@ -261,7 +356,7 @@ class AgnesTextToVideo:
                 else:
                     if os.path.exists(temp_path):
                         os.unlink(temp_path)
-                    raise RuntimeError(f"下载视频失败: {str(e)}")
+                    raise RuntimeError(f"下载视频失败：{str(e)}")
 
     def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
         if not CV2_AVAILABLE:
@@ -439,9 +534,9 @@ class AgnesImageToVideo:
         if max(img_w, img_h) > MAX_SIDE:
             raise ValueError(f"上传图像尺寸过大（{img_w}x{img_h}），请调整图像尺寸。建议最大边长不超过{MAX_SIDE}像素。")
 
-        # 将输入图像转换为纯 Base64 字符串（无前缀）
-        image_base64 = self._image_to_base64(image)
-        print(f"[Agnes] 图像已转换为 Base64 (长度: {len(image_base64)})")
+        # 将输入图像转换为 Data URI Base64 字符串（API 要求 URL 格式）
+        image_base64 = self._image_to_data_url(image)
+        print(f"[Agnes] 图像已转换为 Data URI (长度: {len(image_base64)})")
 
         num_frames = duration_to_frames(duration_seconds, frame_rate)
         actual_duration = num_frames / frame_rate
@@ -449,8 +544,12 @@ class AgnesImageToVideo:
 
         import requests
 
-        create_url = "https://apihub.agnes-ai.com/v1/videos"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        create_url = f"{BASE_URL}/v1/videos"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
         payload = {
             "model": "agnes-video-v2.0",
             "prompt": prompt,
@@ -474,11 +573,14 @@ class AgnesImageToVideo:
         except requests.exceptions.Timeout:
             raise RuntimeError("创建任务超时（180秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"创建任务失败: {str(e)}")
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"创建任务失败：{error_msg}")
 
         video_id = task_data.get("video_id")
         if not video_id:
-            raise RuntimeError(f"创建任务响应中没有video_id: {task_data}")
+            raise RuntimeError(f"创建任务响应中没有 video_id：{str(task_data)[:300]}")
 
         print(f"[Agnes] 任务已创建，video_id: {video_id}")
 
@@ -545,8 +647,11 @@ class AgnesImageToVideo:
     def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 180, interval: float = 5.0) -> str:
         """轮询查询视频结果（与文生视频完全一致）"""
         import requests
-        query_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}&model_name=agnes-video-v2.0"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        query_url = f"{BASE_URL}/agnesapi?video_id={video_id}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
 
         from comfy.utils import ProgressBar
         pbar = ProgressBar(100)
@@ -565,7 +670,7 @@ class AgnesImageToVideo:
                 # 用 API 返回的实际进度更新进度条（0~100）
                 pbar.update_absolute(progress)
 
-                if progress == last_progress and status in ["in_progress", "processing"]:
+                if progress == last_progress and status == "in_progress":
                     stuck_count += 1
                     if stuck_count >= 10:
                         print(f"[Agnes] 警告: 进度停滞在 {progress}% 超过10次，继续等待...")
@@ -574,22 +679,23 @@ class AgnesImageToVideo:
                     last_progress = progress
                     stuck_count = 0
 
-                if status == "completed":
+                if status == "completed" or result.get("internal_status") == "completed":
                     print(f"[Agnes] 视频生成完成，进度: {progress}%")
-                    video_url = result.get("remixed_from_video_id")
+                    video_url = result.get("url")
                     if not video_url:
-                        video_url = result.get("video_url") or result.get("url")
+                        metadata = result.get("metadata", {}) or {}
+                        video_url = metadata.get("url")
                     if not video_url:
-                        raise RuntimeError(f"任务完成但未找到视频URL: {result}")
+                        raise RuntimeError(f"任务完成但未找到视频URL：{str(result)[:300]}")
                     return video_url
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
-                    raise RuntimeError(f"视频生成失败: {error_msg}")
+                    raise RuntimeError(f"视频生成失败，原因：{error_msg}")
                 else:
                     print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
-                print(f"[Agnes] 查询出错: {e}, 重试中...")
+                print(f"[Agnes] 查询出错（HTTP {e.response.status_code if (hasattr(e, 'response') and e.response is not None) else 'N/A'}）: {e}, 重试中...")
                 time.sleep(interval)
         raise RuntimeError(f"视频生成超时（已等待 {max_retries * interval} 秒），video_id: {video_id}")
 
@@ -619,7 +725,7 @@ class AgnesImageToVideo:
                 else:
                     if os.path.exists(temp_path):
                         os.unlink(temp_path)
-                    raise RuntimeError(f"下载视频失败: {str(e)}")
+                    raise RuntimeError(f"下载视频失败：{str(e)}")
 
     def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
         """提取视频帧和音频（与文生视频完全一致）"""
@@ -796,9 +902,9 @@ class AgnesMultiImageToVideo:
             if max(w, h) > MAX_SIDE:
                 raise ValueError(f"上传图像尺寸过大（{w}x{h}），请调整图像尺寸。建议最大边长不超过{MAX_SIDE}像素。")
 
-        # 将图像列表转换为 Base64 列表
-        image_base64_list = [self._image_to_base64(img) for img in image_list]
-        print(f"[Agnes] 已转换 {len(image_base64_list)} 张参考图为 Base64")
+        # 将图像列表转换为 Data URI 列表（API 要求 URL 格式）
+        image_base64_list = [f"data:image/png;base64,{self._image_to_base64(img)}" for img in image_list]
+        print(f"[Agnes] 已转换 {len(image_base64_list)} 张参考图为 Data URI")
 
         num_frames = duration_to_frames(duration_seconds, frame_rate)
         actual_duration = num_frames / frame_rate
@@ -806,8 +912,12 @@ class AgnesMultiImageToVideo:
 
         import requests
 
-        create_url = "https://apihub.agnes-ai.com/v1/videos"
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        create_url = f"{BASE_URL}/v1/videos"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
 
         # 按官方文档：关键帧模式使用 extra_body.image（URL 数组）+ mode=keyframes
         extra_body = {
@@ -838,18 +948,14 @@ class AgnesMultiImageToVideo:
         except requests.exceptions.Timeout:
             raise RuntimeError("创建任务超时（180秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
-            # 输出 API 返回的详细错误信息
-            error_detail = ""
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_detail = f" | 响应: {e.response.text[:500]}"
-                except:
-                    pass
-            raise RuntimeError(f"创建任务失败: {str(e)}{error_detail}")
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"创建任务失败：{error_msg}")
 
         video_id = task_data.get("video_id")
         if not video_id:
-            raise RuntimeError(f"创建任务响应中没有video_id: {task_data}")
+            raise RuntimeError(f"创建任务响应中没有 video_id：{str(task_data)[:300]}")
 
         print(f"[Agnes] 任务已创建，video_id: {video_id}")
 
@@ -887,8 +993,11 @@ class AgnesMultiImageToVideo:
     def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 180, interval: float = 5.0) -> str:
         """轮询查询视频结果"""
         import requests
-        query_url = f"https://apihub.agnes-ai.com/agnesapi?video_id={video_id}&model_name=agnes-video-v2.0"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        query_url = f"{BASE_URL}/agnesapi?video_id={video_id}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
 
         from comfy.utils import ProgressBar
         pbar = ProgressBar(100)
@@ -907,7 +1016,7 @@ class AgnesMultiImageToVideo:
                 # 用 API 返回的实际进度更新进度条（0~100）
                 pbar.update_absolute(progress)
 
-                if progress == last_progress and status in ["in_progress", "processing"]:
+                if progress == last_progress and status == "in_progress":
                     stuck_count += 1
                     if stuck_count >= 10:
                         print(f"[Agnes] 警告: 进度停滞在 {progress}% 超过10次，继续等待...")
@@ -916,22 +1025,23 @@ class AgnesMultiImageToVideo:
                     last_progress = progress
                     stuck_count = 0
 
-                if status == "completed":
+                if status == "completed" or result.get("internal_status") == "completed":
                     print(f"[Agnes] 视频生成完成，进度: {progress}%")
-                    video_url = result.get("remixed_from_video_id")
+                    video_url = result.get("url")
                     if not video_url:
-                        video_url = result.get("video_url") or result.get("url")
+                        metadata = result.get("metadata", {}) or {}
+                        video_url = metadata.get("url")
                     if not video_url:
-                        raise RuntimeError(f"任务完成但未找到视频URL: {result}")
+                        raise RuntimeError(f"任务完成但未找到视频URL：{str(result)[:300]}")
                     return video_url
                 elif status == "failed":
                     error_msg = result.get("error", "未知错误")
-                    raise RuntimeError(f"视频生成失败: {error_msg}")
+                    raise RuntimeError(f"视频生成失败，原因：{error_msg}")
                 else:
                     print(f"[Agnes] 状态: {status}, 进度: {progress}%")
                     time.sleep(interval)
             except requests.exceptions.RequestException as e:
-                print(f"[Agnes] 查询出错: {e}, 重试中...")
+                print(f"[Agnes] 查询出错（HTTP {e.response.status_code if (hasattr(e, 'response') and e.response is not None) else 'N/A'}）: {e}, 重试中...")
                 time.sleep(interval)
         raise RuntimeError(f"视频生成超时（已等待 {max_retries * interval} 秒），video_id: {video_id}")
 
@@ -961,7 +1071,7 @@ class AgnesMultiImageToVideo:
                 else:
                     if os.path.exists(temp_path):
                         os.unlink(temp_path)
-                    raise RuntimeError(f"下载视频失败: {str(e)}")
+                    raise RuntimeError(f"下载视频失败：{str(e)}")
 
     def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
         """提取视频帧和音频"""
@@ -1086,7 +1196,7 @@ class AgnesTextToImage:
         print(f"[Agnes] 文生图请求: prompt={prompt[:60]}..., size={size}")
 
         import requests
-        url = "https://apihub.agnes-ai.com/v1/images/generations"
+        url = f"{BASE_URL}/v1/images/generations"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -1107,12 +1217,15 @@ class AgnesTextToImage:
         except requests.exceptions.Timeout:
             raise RuntimeError("图像生成请求超时（300秒），请检查网络")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"图像生成请求失败: {str(e)}")
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"图像生成请求失败：{error_msg}")
 
         # 解析Base64图片数据
         data = result.get("data", [])
         if not data:
-            raise RuntimeError(f"响应中没有data字段: {result}")
+            raise RuntimeError(f"响应中没有 data 字段：{str(result)[:300]}")
         b64_json = data[0].get("b64_json")
         if not b64_json:
             # 降级：尝试url输出
@@ -1121,7 +1234,7 @@ class AgnesTextToImage:
                 print(f"[Agnes] 响应为URL，将下载图片: {img_url}")
                 img_data = self._download_image(img_url)
             else:
-                raise RuntimeError(f"响应中没有图片数据: {result}")
+                raise RuntimeError(f"响应中没有图片数据：{str(result)[:300]}")
         else:
             import base64
             img_data = base64.b64decode(b64_json)
@@ -1205,7 +1318,7 @@ class AgnesImageToImage:
         print(f"[Agnes] 图生图请求: prompt={prompt[:60]}..., size={size}")
 
         import requests
-        url = "https://apihub.agnes-ai.com/v1/images/generations"
+        url = f"{BASE_URL}/v1/images/generations"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -1230,12 +1343,15 @@ class AgnesImageToImage:
         except requests.exceptions.Timeout:
             raise RuntimeError("图生图请求超时（300秒），请检查网络")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"图生图请求失败: {str(e)}")
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"图生图请求失败：{error_msg}")
 
         # 解析Base64图片数据
         data = result.get("data", [])
         if not data:
-            raise RuntimeError(f"响应中没有data字段: {result}")
+            raise RuntimeError(f"响应中没有 data 字段：{str(result)[:300]}")
         b64_json = data[0].get("b64_json")
         if not b64_json:
             # 降级：尝试url
@@ -1244,7 +1360,7 @@ class AgnesImageToImage:
                 print(f"[Agnes] 响应为URL，将下载图片: {img_url}")
                 img_data = self._download_image(img_url)
             else:
-                raise RuntimeError(f"响应中没有图片数据: {result}")
+                raise RuntimeError(f"响应中没有图片数据：{str(result)[:300]}")
         else:
             import base64
             img_data = base64.b64decode(b64_json)
@@ -1366,7 +1482,7 @@ class AgnesImageToImage:
         # print(f"[Agnes] 多图编辑请求: prompt={prompt[:60]}..., size={size}, 图像数量={len(image_data_uris)}")
 
         # import requests
-        # url = "https://apihub.agnes-ai.com/v1/images/generations"
+        # url = f"{BASE_URL}/v1/images/generations"
         # headers = {
             # "Authorization": f"Bearer {api_key}",
             # "Content-Type": "application/json"
@@ -1450,6 +1566,472 @@ class AgnesImageToImage:
         # response.raise_for_status()
         # return response.content
 
+class AgnesChat:
+    """
+    Agnes 文本对话节点：支持连续对话、流式输出
+    - 支持选择模型（agnes-2.5-flash / agnes-2.0-flash）
+    - 下方文本框输入用户提示词
+    - 可选系统提示词输入端口
+    - 对话记忆开关 + 工作流持久化
+    - 输出端口输出最新一条回复和格式化对话历史
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": (["agnes-2.5-flash", "agnes-2.0-flash"], {
+                    "default": "agnes-2.5-flash",
+                    "tooltip": "选择文本模型，2.5 为最新升级版"
+                }),
+                "user_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "在此输入您的问题"
+                }),
+                "thinking_enabled": ("BOOLEAN", {
+                    "default": True,
+                    "label": "思考模式",
+                    "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
+                }),
+                "max_tokens": ("INT", {
+                    "default": 64000,
+                    "min": 64,
+                    "max": 65536,
+                    "step": 64,
+                    "tooltip": "最大生成 Token 数量"
+                }),
+                "temperature": ("FLOAT", {
+                    "default": 0.7,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "tooltip": "控制输出随机性，值越低结果越确定"
+                }),
+                "memory_enabled": ("BOOLEAN", {
+                    "default": True,
+                    "label": "对话记忆",
+                    "tooltip": "启用后保留对话上下文，支持连续多轮对话。关闭后每次对话独立"
+                }),
+            },
+            "optional": {
+                "system_prompt": ("STRING", {
+                    "forceInput": True,
+                    "multiline": True,
+                    "tooltip": "可选的系统提示词，从输入端口接入"
+                }),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("回复", "对话历史")
+    FUNCTION = "chat"
+    OUTPUT_NODE = True
+    CATEGORY = "智绘Store/Agens AI"
+    DESCRIPTION = "Agnes 文本对话：支持选择模型（默认 agnes-2.5-flash）、连续对话、流式输出。「回复」端口输出最新回复，「对话历史」端口输出格式化后的完整对话。"
+
+    def _format_history_output(self, history: list, system_prompt: str = "") -> str:
+        """将对话历史格式化为指定格式的输出文本"""
+        lines = []
+        if system_prompt and system_prompt.strip():
+            lines.append(f"系统提示词：{system_prompt}")
+            lines.append("————————————————————————")
+        for msg in history:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                lines.append(f"用户：{content}")
+            elif role == "assistant":
+                lines.append(f"Agnes：{content}")
+            elif role == "system":
+                lines.append(f"系统提示词：{content}")
+            else:
+                lines.append(f"{role}：{content}")
+            lines.append("————————————————————————")
+        return "\n".join(lines)
+
+    def chat(self, model, user_prompt, thinking_enabled, max_tokens, temperature, memory_enabled=True, system_prompt=None, unique_id=None, extra_pnginfo=None):
+        api_key = get_api_key()
+        if not api_key:
+            raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
+
+        if not user_prompt or user_prompt.strip() == "":
+            raise ValueError("请输入用户提示词")
+
+        node_id = str(unique_id[0]) if unique_id else "default"
+
+        # 获取对话历史（优先从内存取，其次从工作流恢复）
+        history = _chat_history_store.get(node_id, [])
+        if not history and memory_enabled:
+            saved = _load_chat_history_from_workflow(unique_id, extra_pnginfo)
+            if saved:
+                history = saved
+                _chat_history_store[node_id] = history
+
+        # 构建 messages 数组
+        messages = []
+        if system_prompt and system_prompt.strip():
+            messages.append({"role": "system", "content": system_prompt})
+        if memory_enabled:
+            messages.extend(history)
+        if user_prompt and user_prompt.strip():
+            messages.append({"role": "user", "content": user_prompt})
+
+        # 调用流式 API
+        url = f"{BASE_URL}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+        # 启用思考模式时添加 chat_template_kwargs（OpenAI 兼容格式）
+        if thinking_enabled:
+            payload["chat_template_kwargs"] = {
+                "thinking": True,
+            }
+
+        import requests
+        response_text = ""
+
+        try:
+            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 120))
+            http_response.raise_for_status()
+            result = http_response.json()
+            choices = result.get('choices', [])
+            if choices:
+                response_text = choices[0].get('message', {}).get('content', '').strip()
+        except requests.exceptions.Timeout:
+            raise RuntimeError("对话请求超时（120秒），请检查网络或稍后重试")
+        except requests.exceptions.RequestException as e:
+            resp = e.response
+            status_code = resp.status_code if resp is not None else None
+            response_body = resp.text[:600] if resp is not None else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"对话请求失败：{error_msg}")
+
+        if not response_text:
+            raise RuntimeError("API 返回内容为空，请重试")
+
+        # 更新对话历史
+        if memory_enabled:
+            history.append({"role": "user", "content": user_prompt})
+            history.append({"role": "assistant", "content": response_text})
+            _chat_history_store[node_id] = history
+            # 持久化到工作流（不含图片，文本对话无需剥离）
+            _save_chat_history_to_workflow(history, unique_id, extra_pnginfo)
+        else:
+            # 不启用记忆时，仅保留当前轮次用于格式化输出
+            history = [
+                {"role": "user", "content": user_prompt},
+                {"role": "assistant", "content": response_text},
+            ]
+
+        # 生成格式化对话历史输出
+        formatted_history = self._format_history_output(history, system_prompt)
+
+        # 在 ui 中返回序列化历史，供前端保存到 this.properties 实现持久化
+        return {"ui": {"text": response_text, "history": json.dumps(history, ensure_ascii=False)}, "result": (response_text, formatted_history)}
+
+
+class AgnesVisionChat:
+    """
+    Agnes 图像理解对话节点：支持图像+文本多模态输入、连续对话
+    - 支持选择模型（agnes-2.5-flash / agnes-2.0-flash）
+    - 图像输入端口 + 文本提示词
+    - 可选系统提示词输入端口
+    - 对话记忆开关 + 工作流持久化
+    - 输出端口输出最新一条回复和格式化对话历史
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": (["agnes-2.5-flash", "agnes-2.0-flash"], {
+                    "default": "agnes-2.5-flash",
+                    "tooltip": "选择文本模型，2.5 支持多模态输入（图像+文本）"
+                }),
+                "user_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "在此输入您的问题（可结合图像提问）"
+                }),
+                "thinking_enabled": ("BOOLEAN", {
+                    "default": True,
+                    "label": "思考模式",
+                    "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
+                }),
+                "max_tokens": ("INT", {
+                    "default": 64000,
+                    "min": 64,
+                    "max": 65536,
+                    "step": 64,
+                    "tooltip": "最大生成 Token 数量"
+                }),
+                "temperature": ("FLOAT", {
+                    "default": 0.7,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "tooltip": "控制输出随机性，值越低结果越确定"
+                }),
+                "memory_enabled": ("BOOLEAN", {
+                    "default": False,
+                    "label": "对话记忆",
+                    "tooltip": "启用后保留对话上下文，支持连续多轮对话。关闭后每次对话独立"
+                }),
+            },
+            "optional": {
+                "images": ("IMAGE", {
+                    "forceInput": True,
+                    "tooltip": "输入图像（可选），支持多张图像组成的批次"
+                }),
+                "system_prompt": ("STRING", {
+                    "forceInput": True,
+                    "multiline": True,
+                    "tooltip": "可选的系统提示词，从输入端口接入"
+                }),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("回复", "对话历史")
+    FUNCTION = "chat"
+    OUTPUT_NODE = True
+    CATEGORY = "智绘Store/Agens AI"
+    DESCRIPTION = "Agnes 图像理解：支持上传图像进行视觉问答、图像描述等。需要 agnes-2.5-flash 模型。「回复」端口输出最新回复，「对话历史」端口输出格式化后的完整对话。"
+
+    def _tensor_to_data_uri(self, image_tensor: torch.Tensor) -> str:
+        """将 ComfyUI 图像张量转换为 Data URI Base64 字符串"""
+        import base64
+        from io import BytesIO
+        from PIL import Image
+
+        if image_tensor.dim() == 4:
+            img_tensor = image_tensor[0]
+        else:
+            img_tensor = image_tensor
+        img_np = (img_tensor.cpu().numpy() * 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_np, mode='RGB')
+        buffer = BytesIO()
+        pil_img.save(buffer, format='PNG')
+        b64_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{b64_str}"
+
+    def _format_history_output(self, history: list, system_prompt: str = "") -> str:
+        """将对话历史格式化为指定格式的输出文本（兼容多模态消息）"""
+        lines = []
+        if system_prompt and system_prompt.strip():
+            lines.append(f"系统提示词：{system_prompt}")
+            lines.append("————————————————————————")
+        for msg in history:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # 多模态内容，提取文本部分
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_parts.append(item.get("text", ""))
+                content = (" ".join(text_parts) + " [图像]").strip()
+                if content == "[图像]":
+                    content = "[用户上传了图像]"
+            if role == "user":
+                lines.append(f"用户：{content}")
+            elif role == "assistant":
+                lines.append(f"Agnes：{content}")
+            elif role == "system":
+                lines.append(f"系统提示词：{content}")
+            else:
+                lines.append(f"{role}：{content}")
+            lines.append("————————————————————————")
+        return "\n".join(lines)
+
+    def chat(self, model, user_prompt, thinking_enabled, max_tokens, temperature, memory_enabled=True, images=None, system_prompt=None, unique_id=None, extra_pnginfo=None):
+        api_key = get_api_key()
+        if not api_key:
+            raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
+
+        if not user_prompt or user_prompt.strip() == "":
+            if images is None:
+                raise ValueError("请输入用户提示词")
+        node_id = "vision_" + str(unique_id[0]) if unique_id else "vision_default"
+
+        # 获取对话历史（优先从内存取，其次从工作流恢复）
+        history = _chat_history_store.get(node_id, [])
+        if not history and memory_enabled:
+            saved = _load_chat_history_from_workflow(unique_id, extra_pnginfo, key_suffix="_vision")
+            if saved:
+                history = saved
+                _chat_history_store[node_id] = history
+
+        # 构建 messages 数组
+        messages = []
+        if system_prompt and system_prompt.strip():
+            messages.append({"role": "system", "content": system_prompt})
+        if memory_enabled:
+            messages.extend(history)
+
+        # 构建用户消息 content（支持纯文本或图像+文本多模态）
+        content_array = None
+        if images is not None:
+            content_array = [{"type": "text", "text": user_prompt}]
+            if images.dim() == 4:
+                batch_size = images.shape[0]
+                for i in range(batch_size):
+                    img_tensor = images[i].unsqueeze(0) if images.dim() == 4 else images
+                    data_uri = self._tensor_to_data_uri(img_tensor)
+                    content_array.append({
+                        "type": "image_url",
+                        "image_url": {"url": data_uri}
+                    })
+            else:
+                data_uri = self._tensor_to_data_uri(images)
+                content_array.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_uri}
+                })
+            messages.append({"role": "user", "content": content_array})
+        else:
+            messages.append({"role": "user", "content": user_prompt})
+
+        # 调用流式 API
+        url = f"{BASE_URL}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+        # 启用思考模式
+        if thinking_enabled:
+            payload["chat_template_kwargs"] = {
+                "thinking": True,
+            }
+
+        import requests
+        response_text = ""
+
+        try:
+            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 120))
+            http_response.raise_for_status()
+            result = http_response.json()
+            choices = result.get('choices', [])
+            if choices:
+                response_text = choices[0].get('message', {}).get('content', '').strip()
+        except requests.exceptions.Timeout:
+            raise RuntimeError("对话请求超时（120秒），请检查网络或稍后重试")
+        except requests.exceptions.RequestException as e:
+            resp = e.response
+            status_code = resp.status_code if resp is not None else None
+            response_body = resp.text[:600] if resp is not None else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"对话请求失败：{error_msg}")
+
+        if not response_text:
+            raise RuntimeError("API 返回内容为空，请重试")
+
+        # 更新对话历史
+        if memory_enabled:
+            user_content = content_array if content_array else user_prompt
+            history.append({"role": "user", "content": user_content})
+            history.append({"role": "assistant", "content": response_text})
+            _chat_history_store[node_id] = history
+            # 持久化到工作流（剥离图片数据以减小工作流体积）
+            history_for_storage = _strip_images_from_history(history)
+            _save_chat_history_to_workflow(history_for_storage, unique_id, extra_pnginfo, key_suffix="_vision")
+        else:
+            # 不启用记忆时，仅保留当前轮次用于格式化输出
+            history = [
+                {"role": "user", "content": content_array if content_array else user_prompt},
+                {"role": "assistant", "content": response_text},
+            ]
+
+        # 生成格式化对话历史输出
+        formatted_history = self._format_history_output(history, system_prompt)
+
+        # 在 ui 中返回序列化历史，供前端保存到 this.properties 实现持久化
+        return {"ui": {"text": response_text, "history": json.dumps(history, ensure_ascii=False)}, "result": (response_text, formatted_history)}
+
+
+class AgnesAssistantExpert:
+    """
+    Agnes 助手专家节点：从 assistant.txt 加载预设的系统提示词，提供下拉选择
+    - 输出选中的系统提示词文本，可直接连接到 AgnesChat / AgnesVisionChat 的 system_prompt 端口
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        prompts = cls._load_prompts()
+        options = list(prompts.keys())
+        return {
+            "required": {
+                "assistant": (options, {
+                    "default": options[0] if options else "",
+                    "tooltip": "选择智能助手角色，获取对应的系统提示词"
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("系统提示词",)
+    FUNCTION = "get_prompt"
+    CATEGORY = "智绘Store/Agens AI"
+    DESCRIPTION = "Agnes 助手专家：提供预设的系统提示词，用于引导文本对话和图像理解对话节点的行为。"
+
+    @staticmethod
+    def _load_prompts() -> dict:
+        """从 resource/assistant/ 文件夹加载提示词预设，每个 .md 文件为一个选项
+        文件名格式：{排序}-{助手名}.md，从文件名解析助手名作为下拉选项标题
+        """
+        prompts = {}
+        folder = os.path.join(PLUGIN_DIR, "resource", "assistant")
+        if not os.path.isdir(folder):
+            return {"默认助手": "你是一个有用的AI助手，请根据用户的问题提供准确、有帮助的回答。"}
+
+        # 列出所有 .md 文件并按文件名排序
+        files = sorted([f for f in os.listdir(folder) if f.endswith(".md")])
+        for filename in files:
+            filepath = os.path.join(folder, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if not content:
+                continue
+            # 从文件名解析标题：去掉排序前缀和扩展名
+            # "3-分镜制作专家.md" -> "分镜制作专家"
+            title = filename.rsplit(".", 1)[0]  # 去掉 .md
+            if "-" in title:
+                title = title.split("-", 1)[1]  # 去掉 "N-" 前缀
+            prompts[title] = content
+
+        if not prompts:
+            prompts = {"默认助手": "你是一个有用的AI助手，请根据用户的问题提供准确、有帮助的回答。"}
+
+        return prompts
+
+    def get_prompt(self, assistant):
+        prompts = self._load_prompts()
+        return (prompts.get(assistant, ""),)
+
+
 # 节点注册
 NODE_CLASS_MAPPINGS = {
     "AgnesTextToVideo": AgnesTextToVideo,
@@ -1457,6 +2039,9 @@ NODE_CLASS_MAPPINGS = {
     "AgnesMultiImageToVideo": AgnesMultiImageToVideo, 
     "AgnesTextToImage": AgnesTextToImage,
     "AgnesImageToImage": AgnesImageToImage,
+    "AgnesChat": AgnesChat,
+    "AgnesVisionChat": AgnesVisionChat,
+    "AgnesAssistantExpert": AgnesAssistantExpert,
     # "AgnesMultiImageToImage": AgnesMultiImageToImage,
 }
 
@@ -1466,5 +2051,31 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AgnesMultiImageToVideo": "Agnes 首尾帧生视频",
     "AgnesTextToImage": "Agnes 文生图",
     "AgnesImageToImage": "Agnes 图生图",
+    "AgnesChat": "Agnes 文本对话",
+    "AgnesVisionChat": "Agnes 图像理解对话",
+    "AgnesAssistantExpert": "Agnes 助手专家",
     # "AgnesMultiImageToImage": "Agnes 多图编辑",
 }
+
+
+# ====== 清空对话历史 API 端点 ======
+from aiohttp import web
+import server
+
+@server.PromptServer.instance.routes.post("/agnes/clear_chat")
+async def clear_chat(request):
+    """清空指定 node 的对话历史（支持普通 chat 和 vision chat）"""
+    try:
+        data = await request.json()
+        node_id = data.get("node_id", "")
+        if not node_id:
+            return web.json_response({"status": "error", "message": "node_id is required"}, status=400)
+        # 尝试清除普通对话历史和 vision 对话历史
+        cleared = False
+        for key in [node_id, "vision_" + node_id]:
+            if key in _chat_history_store:
+                del _chat_history_store[key]
+                cleared = True
+        return web.json_response({"status": "ok", "cleared": cleared})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=500)

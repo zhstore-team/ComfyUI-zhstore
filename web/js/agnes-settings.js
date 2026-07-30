@@ -76,9 +76,9 @@ app.ui.settings.addSetting({
 				biliTag.style.color = "white";
 				biliTag.style.cursor = "pointer";
 				biliTag.onclick = () => {
-					window.open("https://platform.agnes-ai.com/login", "_blank");
+					window.open("https://platform.agnes-ai.cn/settings/apiKeys", "_blank");
 				};
-/*         biliTag.href = "https://platform.agnes-ai.com/login";
+/*         biliTag.href = "https://platform.agnes-ai.cn/settings/apiKeys";
         biliTag.target = "_blank";
         biliTag.style.textDecoration = "none";
         biliTag.style.display = "flex";

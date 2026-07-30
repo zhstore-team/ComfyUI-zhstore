@@ -50,5 +50,609 @@
         "tooltip": "Frame rate (FPS) of the video"
       }
     }
+  },
+  "AgnesImageToVideo": {
+    "display_name": "Agnes Image-to-Video",
+    "description": "Generate video from a single image using Agnes-Video-V2.0 model. Control video length by duration (seconds), automatically adapt to API frame constraints. Need to configure API Key in ComfyUI settings.",
+    "inputs": {
+      "image": {
+        "name": "image",
+        "tooltip": "Input image to animate into a video"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Describe what to animate in the image, e.g. character actions, camera movement"
+      },
+      "negative_prompt": {
+        "name": "negative_prompt",
+        "tooltip": "Negative prompt, describing content to avoid"
+      },
+      "width": {
+        "name": "width",
+        "tooltip": "Video width (pixels)"
+      },
+      "height": {
+        "name": "height",
+        "tooltip": "Video height (pixels)"
+      },
+      "frame_rate": {
+        "name": "frame_rate",
+        "tooltip": "Frame rate (FPS), range 1-60"
+      },
+      "duration_seconds": {
+        "name": "duration_seconds",
+        "tooltip": "Desired video duration (seconds), actual duration may be slightly adjusted"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      },
+      "num_inference_steps": {
+        "name": "num_inference_steps",
+        "tooltip": "Number of inference steps"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "frames",
+        "tooltip": "Generated video frame sequence (RGB images), shape [N, H, W, C]"
+      },
+      "1": {
+        "name": "audio",
+        "tooltip": "Audio data from the video (None if no audio), contains waveform and sample_rate"
+      },
+      "2": {
+        "name": "fps",
+        "tooltip": "Frame rate (FPS) of the video"
+      }
+    }
+  },
+  "AgnesMultiImageToVideo": {
+    "display_name": "Agnes Multi-Image-to-Video",
+    "description": "Generate video using first-frame, last-frame (and optional mid-frame) reference images with Agnes-Video-V2.0. Creates smooth transition animation between reference frames.",
+    "inputs": {
+      "image1": {
+        "name": "First Frame",
+        "tooltip": "First frame reference image (required)"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Describe transition from first to last frame, e.g. smoothly change from state A to state B"
+      },
+      "negative_prompt": {
+        "name": "negative_prompt",
+        "tooltip": "Negative prompt"
+      },
+      "width": {
+        "name": "width",
+        "tooltip": "Video width"
+      },
+      "height": {
+        "name": "height",
+        "tooltip": "Video height"
+      },
+      "frame_rate": {
+        "name": "frame_rate",
+        "tooltip": "Frame rate (FPS)"
+      },
+      "duration_seconds": {
+        "name": "duration_seconds",
+        "tooltip": "Desired video duration (seconds)"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      },
+      "num_inference_steps": {
+        "name": "num_inference_steps",
+        "tooltip": "Number of inference steps"
+      },
+      "image2": {
+        "name": "Mid Frame",
+        "tooltip": "Middle frame reference image (optional)"
+      },
+      "image3": {
+        "name": "Last Frame",
+        "tooltip": "Last frame reference image (optional, at least 1 connection required)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "frames",
+        "tooltip": "Generated video frame sequence (RGB images), shape [N, H, W, C]"
+      },
+      "1": {
+        "name": "audio",
+        "tooltip": "Audio data from the video (None if no audio), contains waveform and sample_rate"
+      },
+      "2": {
+        "name": "fps",
+        "tooltip": "Frame rate (FPS) of the video"
+      }
+    }
+  },
+  "AgnesTextToImage": {
+    "display_name": "Agnes Text-to-Image",
+    "description": "Generate image from text using Agnes-Image-2.1-Flash model. Need to configure Agnes API Key in ComfyUI settings.",
+    "inputs": {
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Text description of the image content"
+      },
+      "width": {
+        "name": "width",
+        "tooltip": "Image width (pixels)"
+      },
+      "height": {
+        "name": "height",
+        "tooltip": "Image height (pixels)"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "image",
+        "tooltip": "Generated image tensor, shape [1, H, W, C], value range 0~1"
+      }
+    }
+  },
+  "AgnesImageToImage": {
+    "display_name": "Agnes Image-to-Image",
+    "description": "Generate new image from input image and prompt using Agnes-Image-2.1-Flash model. Need to configure API Key.",
+    "inputs": {
+      "image": {
+        "name": "image",
+        "tooltip": "Input image to use as reference for editing or transformation"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Describe how to modify the image, e.g. style transfer, add elements"
+      },
+      "width": {
+        "name": "width",
+        "tooltip": "Output image width (pixels)"
+      },
+      "height": {
+        "name": "height",
+        "tooltip": "Output image height (pixels)"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "image",
+        "tooltip": "Generated image tensor, shape [1, H, W, C], value range 0~1"
+      }
+    }
+  },
+  "AgnesChat": {
+    "display_name": "Agnes Chat",
+    "description": "Agnes chat node: supports model selection, continuous conversation, and streaming output.",
+    "inputs": {
+      "model": {
+        "name": "Model",
+        "tooltip": "Select the text model, 2.5 is the latest upgrade"
+      },
+      "user_prompt": {
+        "name": "Prompt",
+        "tooltip": "Enter your question here"
+      },
+      "thinking_enabled": {
+        "name": "Thinking Mode",
+        "tooltip": "When enabled, the model performs deep reasoning before answering. Suitable for complex reasoning tasks."
+      },
+      "max_tokens": {
+        "name": "Max Tokens",
+        "tooltip": "Maximum number of tokens to generate"
+      },
+      "temperature": {
+        "name": "Temperature",
+        "tooltip": "Controls output randomness. Lower values produce more deterministic results."
+      },
+      "memory_enabled": {
+        "name": "Memory",
+        "tooltip": "When enabled, preserves conversation context for multi-turn dialogue. When disabled, each conversation is independent."
+      },
+      "system_prompt": {
+        "name": "System Prompt",
+        "tooltip": "Optional system prompt, connected via input port"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Reply",
+        "tooltip": "The latest reply text"
+      },
+      "1": {
+        "name": "Conversation History",
+        "tooltip": "Formatted full conversation history, including all user and assistant interactions"
+      }
+    }
+  },
+  "AgnesVisionChat": {
+    "display_name": "Agnes Vision Chat",
+    "description": "Agnes vision chat: supports image upload for visual Q&A, image description, etc. Requires agnes-2.5-flash model. Reply port outputs latest reply, History port outputs formatted full conversation.",
+    "inputs": {
+      "model": {
+        "name": "Model",
+        "tooltip": "Select the text model, 2.5 supports multimodal input (image+text)"
+      },
+      "user_prompt": {
+        "name": "Prompt",
+        "tooltip": "Enter your question here (can ask about images)"
+      },
+      "thinking_enabled": {
+        "name": "Thinking Mode",
+        "tooltip": "When enabled, the model performs deep reasoning before answering. Suitable for complex reasoning tasks."
+      },
+      "max_tokens": {
+        "name": "Max Tokens",
+        "tooltip": "Maximum number of tokens to generate"
+      },
+      "temperature": {
+        "name": "Temperature",
+        "tooltip": "Controls output randomness. Lower values produce more deterministic results."
+      },
+      "memory_enabled": {
+        "name": "Memory",
+        "tooltip": "When enabled, preserves conversation context for multi-turn dialogue. When disabled, each conversation is independent."
+      },
+      "images": {
+        "name": "Images",
+        "tooltip": "Input images (optional), supports batched images"
+      },
+      "system_prompt": {
+        "name": "System Prompt",
+        "tooltip": "Optional system prompt, connected via input port"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Reply",
+        "tooltip": "The latest reply text"
+      },
+      "1": {
+        "name": "Conversation History",
+        "tooltip": "Formatted full conversation history, including all user and assistant interactions"
+      }
+    }
+  },
+  "AgnesAssistantExpert": {
+    "display_name": "Agnes Assistant Expert",
+    "description": "Agnes Assistant Expert: provides preset system prompts to guide the behavior of chat and vision chat nodes.",
+    "inputs": {
+      "assistant": {
+        "name": "Assistant Role",
+        "tooltip": "Select an AI assistant role to get the corresponding system prompt"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "System Prompt",
+        "tooltip": "The system prompt text for the selected assistant role"
+      }
+    }
+  },
+  "LoadImageToBase64": {
+    "display_name": "Load Image to Base64",
+    "description": "Load a local image, optionally resize, and output a Base64-encoded PNG string.",
+    "inputs": {
+      "image": {
+        "name": "image",
+        "tooltip": "Select or upload an image file from the input directory (PNG, JPG, JPEG, BMP, TIFF, WEBP)"
+      },
+      "enable_resize": {
+        "name": "Enable Resize",
+        "tooltip": "Whether to resize the image. If enabled and the longest side exceeds Max Dimension, the image will be scaled down proportionally."
+      },
+      "max_dimension": {
+        "name": "Max Dimension",
+        "tooltip": "Maximum dimension (pixels), range 64~4096. Only effective when Enable Resize is True and the original exceeds this value."
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Base64 String",
+        "tooltip": "PNG Base64-encoded string of the processed image (without data:image/png;base64, prefix)"
+      }
+    }
+  },
+  "DecodeBase64": {
+    "display_name": "Decode Base64 to Image",
+    "description": "Decode a Base64-encoded PNG image string back to an image tensor with in-node preview.",
+    "inputs": {
+      "base64_data": {
+        "name": "Base64 Data",
+        "tooltip": "PNG Base64-encoded string (without data:image/png;base64, prefix)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Image",
+        "tooltip": "Decoded image tensor, shape [1, H, W, C], value range 0~1"
+      }
+    }
+  },
+  "EncodeBase64": {
+    "display_name": "Encode Image to Base64",
+    "description": "Encode an input image tensor to a Base64-encoded PNG string.",
+    "inputs": {
+      "image": {
+        "name": "image",
+        "tooltip": "Input image tensor, shape [B, H, W, C], value range 0~1"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Base64 String",
+        "tooltip": "PNG Base64-encoded string (without data:image/png;base64, prefix)"
+      }
+    }
+  },
+  "BooleanSwitch": {
+    "display_name": "Boolean Switch",
+    "description": "Select output based on boolean switch: outputs True input when switch is True, False input when switch is False.",
+    "inputs": {
+      "布尔": {
+        "name": "Boolean",
+        "tooltip": "Boolean switch: True outputs True port, False outputs False port"
+      },
+      "真": {
+        "name": "True",
+        "tooltip": "Data to output when switch is True (optional, defaults to None if disconnected)"
+      },
+      "假": {
+        "name": "False",
+        "tooltip": "Data to output when switch is False (optional, defaults to None if disconnected)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Output",
+        "tooltip": "Data selected by the boolean switch"
+      }
+    }
+  },
+  "ValueEqualityChecker": {
+    "display_name": "Value Equality Checker",
+    "description": "Compare any input value against a preset string, outputs true if matched, false if not.",
+    "inputs": {
+      "比较值": {
+        "name": "Compare Value",
+        "tooltip": "Preset string value for comparison"
+      },
+      "任何输入": {
+        "name": "Any Input",
+        "tooltip": "Any type of input value, converted to string for comparison (optional, treated as empty string if disconnected)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Boolean",
+        "tooltip": "Comparison result: true if matched, false if not"
+      }
+    }
+  },
+  "TextCombiner": {
+    "display_name": "Text Combiner",
+    "description": "Combine up to 5 text inputs into a single string, automatically ignoring empty values. Without newline mode, uses separator. With newline mode, appends separator+newline after each non-empty text.",
+    "inputs": {
+      "文本1": {
+        "name": "Text 1",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本2": {
+        "name": "Text 2",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本3": {
+        "name": "Text 3",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本4": {
+        "name": "Text 4",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本5": {
+        "name": "Text 5",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "分隔符": {
+        "name": "Separator",
+        "tooltip": "Separator string between texts"
+      },
+      "换行": {
+        "name": "Newline Mode",
+        "tooltip": "When enabled, appends separator+newline after each non-empty text (including the last)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Text",
+        "tooltip": "Combined text string"
+      }
+    }
+  },
+  "TextCombiner10": {
+    "display_name": "Text Combiner (10 inputs)",
+    "description": "Combine up to 10 text inputs into a single string, automatically ignoring empty values.",
+    "inputs": {
+      "文本1": {
+        "name": "Text 1",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本2": {
+        "name": "Text 2",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本3": {
+        "name": "Text 3",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本4": {
+        "name": "Text 4",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本5": {
+        "name": "Text 5",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本6": {
+        "name": "Text 6",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本7": {
+        "name": "Text 7",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本8": {
+        "name": "Text 8",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本9": {
+        "name": "Text 9",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "文本10": {
+        "name": "Text 10",
+        "tooltip": "Text to combine (empty values are automatically skipped)"
+      },
+      "分隔符": {
+        "name": "Separator",
+        "tooltip": "Separator string between texts"
+      },
+      "换行": {
+        "name": "Newline Mode",
+        "tooltip": "When enabled, appends separator+newline after each non-empty text (including the last)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Text",
+        "tooltip": "Combined text string"
+      }
+    }
+  },
+  "GroupByenable": {
+    "display_name": "Group Enable Switch",
+    "description": "Control enable/disable state of all nodes within the group. Logic is handled by frontend JavaScript.",
+    "inputs": {
+      "启用分组": {
+        "name": "Enable Group",
+        "tooltip": "Control enable/disable state of all nodes in the group"
+      }
+    }
+  },
+  "GroupBypass": {
+    "display_name": "Group Bypass Switch",
+    "description": "Control bypass state (purple) of all nodes within the group. Logic is handled by frontend JavaScript.",
+    "inputs": {
+      "绕过分组": {
+        "name": "Bypass Group",
+        "tooltip": "Set all nodes in the group to bypass state"
+      }
+    }
+  },
+  "ImageResolutionPreset": {
+    "display_name": "Image Resolution Preset",
+    "description": "Select a preset resolution from dropdown menu, outputs width and height. Supports 1:1, 3:4, 4:3, 2:3, 3:2, 4:7, 7:4, 9:16, 16:9 ratios.",
+    "inputs": {
+      "预设尺寸": {
+        "name": "Preset Size",
+        "tooltip": "Select a preset resolution from the dropdown list"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Width",
+        "tooltip": "Preset width value (pixels)"
+      },
+      "1": {
+        "name": "Height",
+        "tooltip": "Preset height value (pixels)"
+      }
+    }
+  },
+  "ImageOrientationDetector": {
+    "display_name": "Image Orientation Detector",
+    "description": "Detect whether input image is landscape or portrait, and output corresponding preset size parameters.",
+    "inputs": {
+      "图像": {
+        "name": "Image",
+        "tooltip": "Input image tensor"
+      },
+      "宽高比阈值": {
+        "name": "Aspect Ratio Threshold",
+        "tooltip": "Threshold for determining image orientation, default 1.0 works in most cases"
+      },
+      "方形宽度": {
+        "name": "Square Width",
+        "tooltip": "Width output when image is square"
+      },
+      "方形高度": {
+        "name": "Square Height",
+        "tooltip": "Height output when image is square"
+      },
+      "横版宽度": {
+        "name": "Landscape Width",
+        "tooltip": "Width output when image is landscape"
+      },
+      "横版高度": {
+        "name": "Landscape Height",
+        "tooltip": "Height output when image is landscape"
+      },
+      "竖版宽度": {
+        "name": "Portrait Width",
+        "tooltip": "Width output when image is portrait"
+      },
+      "竖版高度": {
+        "name": "Portrait Height",
+        "tooltip": "Height output when image is portrait"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Orientation",
+        "tooltip": "Image orientation: landscape/portrait/square"
+      },
+      "1": {
+        "name": "Is Landscape",
+        "tooltip": "True for landscape, False for portrait or square"
+      },
+      "2": {
+        "name": "Width",
+        "tooltip": "Output width based on detected orientation (pixels)"
+      },
+      "3": {
+        "name": "Height",
+        "tooltip": "Output height based on detected orientation (pixels)"
+      }
+    }
+  },
+  "ShowTextByPerpetual": {
+    "display_name": "Show Text (Persistent)",
+    "description": "Display input text and persist it in the workflow. Text content is saved and loaded along with the workflow.",
+    "inputs": {
+      "text": {
+        "name": "Text",
+        "tooltip": "Text content to display and persist"
+      }
+    }
+  },
+  "MarkdownViewer": {
+    "display_name": "Markdown Document Viewer",
+    "description": "Parse and preview Markdown text as rich content within the node. Supports headings, tables, lists, code blocks, etc.",
+    "inputs": {
+      "markdown": {
+        "name": "Markdown Text",
+        "tooltip": "Markdown formatted text to preview, supports headings, tables, lists, code blocks, bold, italic, etc."
+      }
+    }
   }
 }

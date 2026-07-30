@@ -1,0 +1,6 @@
+# Trae IDE 配置文件
+.trae/
+
+# Python 缓存
+__pycache__/
+*.pyc

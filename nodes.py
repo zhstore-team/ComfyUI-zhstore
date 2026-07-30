@@ -674,11 +674,57 @@ class ShowTextByPerpetual:
 
         # 只返回 UI 更新信息，不返回 result（因此没有输出端口）
         return {"ui": {"text": text}}
-    
 
 
+class MarkdownViewer:
+    """
+    Markdown 文档解析预览节点：
+    输入 Markdown 文本，解析后在节点内以富文本形式显示。
+    支持标题、表格、列表、代码块、加粗、斜体等常见 Markdown 语法。
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "markdown": ("STRING", {
+                    "default": "# Hello Markdown\n\n这是一个 **Markdown** 预览节点。\n\n## 支持的功能\n\n- 标题（H1~H6）\n- **加粗** 和 *斜体*\n- 列表（有序/无序）\n- `行内代码` 和代码块\n- 表格\n- 引用\n- 分割线\n\n| 功能 | 说明 |\n|------|------|\n| 表格 | 支持表格渲染 |\n| 列表 | 支持有序和无序列表 |\n| 代码 | 支持语法高亮 |\n\n> 这是一段引用文本\n\n```python\nprint('Hello ComfyUI!')\n```\n\n---\n\n[GitHub](https://github.com)",
+                    "multiline": True,
+                    "forceInput": True,
+                }),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            },
+        }
 
-  
+    INPUT_IS_LIST = True
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+    FUNCTION = "preview"
+    OUTPUT_NODE = True
+    CATEGORY = "智绘Store/文本工具"
+    DESCRIPTION = "将 Markdown 文本解析为富文本并在节点内预览显示，支持标题、表格、列表、代码块等"
+
+    def preview(self, markdown, unique_id=None, extra_pnginfo=None):
+        text = markdown[0] if isinstance(markdown, list) and len(markdown) > 0 else (markdown or "")
+
+        if unique_id is not None and extra_pnginfo is not None:
+            if isinstance(extra_pnginfo, list) and len(extra_pnginfo) > 0:
+                data = extra_pnginfo[0]
+                if isinstance(data, dict) and "workflow" in data:
+                    workflow = data["workflow"]
+                    uid = unique_id[0] if isinstance(unique_id, list) else unique_id
+                    node = next(
+                        (x for x in workflow.get("nodes", []) if str(x["id"]) == str(uid)),
+                        None,
+                    )
+                    if node:
+                        node["widgets_values"] = [text]
+
+        return {"ui": {"markdown": [text]}}
+
+
 # ========== 节点注册 ==========
 NODE_CLASS_MAPPINGS = {
     "GroupByenable": GroupByenable,
@@ -693,7 +739,7 @@ NODE_CLASS_MAPPINGS = {
     "EncodeBase64": EncodeBase64,
     "LoadImageToBase64": LoadImageToBase64,
     "ShowTextByPerpetual": ShowTextByPerpetual,
-
+    "MarkdownViewer": MarkdownViewer,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -709,5 +755,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "EncodeBase64": "Base64 编码（图像转）",
     "LoadImageToBase64": "Base64 编码（加载图像）",
     "ShowTextByPerpetual": "显示文本（持久化）",
-
+    "MarkdownViewer": "Markdown 文档预览",
 }
