@@ -102,6 +102,143 @@ app.ui.settings.addSetting({
 });
 
 
+// ====================== 1.5 腾讯云 COS 配置（参考视频生成公网 URL） ======================
+// 临时开关：目前屏蔽 COS 配置面板；需要恢复时改为 true
+const COS_SETTINGS_ENABLED = false;
+if (COS_SETTINGS_ENABLED) {
+app.ui.settings.addSetting({
+    id: "智绘Store配置.腾讯云COS配置",
+    name: "腾讯云 COS（参考视频公网 URL）",
+    type: () => {
+        const row = document.createElement("tr");
+        row.className = "agnes-settings-row";
+
+        const cell = document.createElement("td");
+        cell.colSpan = 2;
+        cell.style.padding = "12px 8px";
+
+        // 一个分组卡片容器
+        const card = document.createElement("div");
+        card.style.border = "1px solid var(--p-divider-color, #ccc)";
+        card.style.borderRadius = "8px";
+        card.style.padding = "14px 16px";
+        card.style.display = "flex";
+        card.style.flexDirection = "column";
+        card.style.gap = "12px";
+        card.style.maxWidth = "720px";
+
+        // 标题行 + 状态
+        const head = document.createElement("div");
+        head.style.display = "flex";
+        head.style.alignItems = "center";
+        head.style.gap = "10px";
+        const title = document.createElement("span");
+        title.textContent = "腾讯云 COS 配置";
+        title.style.fontWeight = "bold";
+        const status = document.createElement("span");
+        status.textContent = "…";
+        status.style.fontSize = "12px";
+        status.style.color = "var(--p-text-color-muted, #888)";
+        head.appendChild(title);
+        head.appendChild(status);
+        card.appendChild(head);
+
+        // 表单网格：密钥占整行，Bucket/Region/Domain 一行一个
+        const makeField = (label, type = "text") => {
+            const wrap = document.createElement("label");
+            wrap.style.display = "flex";
+            wrap.style.flexDirection = "column";
+            wrap.style.gap = "4px";
+            const lbl = document.createElement("span");
+            lbl.textContent = label;
+            lbl.style.fontSize = "13px";
+            const input = document.createElement("input");
+            input.type = type;
+            input.style.padding = "6px 10px";
+            input.style.border = "1px solid var(--p-border-color, #bbb)";
+            input.style.borderRadius = "4px";
+            input.style.fontSize = "14px";
+            wrap.appendChild(lbl);
+            wrap.appendChild(input);
+            return { wrap, input };
+        };
+
+        const secretId = makeField("SecretId", "password");
+        const secretKey = makeField("SecretKey", "password");
+        const bucket = makeField("Bucket");
+        const region = makeField("Region（如 ap-shanghai）");
+        const domain = makeField("访问域名（可选，留空用默认域名）");
+        cell.appendChild(secretId.wrap);
+        cell.appendChild(secretKey.wrap);
+        cell.appendChild(bucket.wrap);
+        cell.appendChild(region.wrap);
+        cell.appendChild(domain.wrap);
+
+        const hint = document.createElement("div");
+        hint.textContent = "SecretId/SecretKey 在腾讯云「访问管理 → API 密钥」获取；Bucket/Region 在 COS 控制台获取。桶需为公有读。";
+        hint.style.fontSize = "12px";
+        hint.style.color = "var(--p-text-color-muted, #999)";
+        card.appendChild(cell);
+        card.appendChild(hint);
+
+        const saveBtn = document.createElement("button");
+        saveBtn.textContent = "保存 COS 配置";
+        saveBtn.style.alignSelf = "flex-start";
+        saveBtn.style.padding = "8px 18px";
+        saveBtn.style.cursor = "pointer";
+        saveBtn.style.backgroundColor = "var(--comfy-primary, #6c5ce7)";
+        saveBtn.style.color = "white";
+        saveBtn.style.border = "none";
+        saveBtn.style.borderRadius = "4px";
+        saveBtn.onclick = async () => {
+            const payload = {
+                secret_id: secretId.input.value.trim(),
+                secret_key: secretKey.input.value.trim(),
+                bucket: bucket.input.value.trim(),
+                region: region.input.value.trim(),
+                domain: domain.input.value.trim(),
+            };
+            try {
+                const response = await fetch("/agnes/save_cos_config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json();
+                if (result.status === "success") {
+                    showMessage("✅ " + (result.message || "COS 配置已保存"));
+                } else {
+                    showMessage("❌ " + (result.message || "保存失败"), true);
+                }
+            } catch (err) {
+                console.error("保存 COS 配置出错:", err);
+                showMessage("❌ 保存出错，请检查控制台", true);
+            }
+        };
+        card.appendChild(saveBtn);
+
+        // 回显已保存的配置
+        fetch("/agnes/get_cos_config")
+            .then((r) => r.json())
+            .then((data) => {
+                const has = !!data.has_cos;
+                status.textContent = has ? "● 已配置" : "○ 未配置";
+                status.style.color = has ? "#2ecc71" : "#e67e22";
+                if (data.cos_secret_id) secretId.input.value = data.cos_secret_id;
+                if (data.cos_secret_key) secretKey.input.value = data.cos_secret_key;
+                if (data.cos_bucket) bucket.input.value = data.cos_bucket;
+                if (data.cos_region) region.input.value = data.cos_region;
+                if (data.cos_domain) domain.input.value = data.cos_domain;
+            })
+            .catch(() => { status.textContent = "获取状态失败"; });
+
+        row.appendChild(card);
+        return row;
+    }
+});
+} // end COS_SETTINGS_ENABLED
+
+
 // ====================== 2. 交流反馈区块（Base64 内嵌图片） ======================
 app.ui.settings.addSetting({
     id: "智绘Store配置.ComfyUI在线知识库",

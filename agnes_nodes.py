@@ -92,6 +92,40 @@ def _strip_images_from_history(history):
             stripped.append(msg)
     return stripped
 
+def _extract_chat_response(result) -> str:
+    """从 chat/completions 响应中稳健地提取回复文本。
+
+    兼容多种响应形态：
+    - content 为字符串 / 内容块数组 / None / 空字符串
+    - Thinking 模式下正文可能为空，回退到 reasoning_content（推理内容）
+    """
+    choices = result.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+
+    content = message.get("content")
+    parts = []
+    if isinstance(content, str):
+        if content.strip():
+            parts.append(content.strip())
+    elif isinstance(content, list):
+        # OpenAI 兼容：content 为 text/image_url 内容块数组
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+    text = "\n".join(parts).strip()
+
+    if not text:
+        # Thinking 模式：正文为空时回退到推理内容（reasoning_content 为字符串）
+        reasoning = message.get("reasoning_content")
+        if isinstance(reasoning, str) and reasoning.strip():
+            text = reasoning.strip()
+
+    return text
+
 
 def _get_api_error(status_code: Optional[int], response_body: str = "") -> str:
     """根据 HTTP 状态码返回中文错误说明"""
@@ -121,6 +155,96 @@ def _get_api_error(status_code: Optional[int], response_body: str = "") -> str:
         body = response_body[:600]
         return f"{msg}\n\n响应详情：{body}"
     return msg
+
+def _raise_if_interrupted():
+    """检测 ComfyUI 是否被用户点击「停止运行」（interrupt）。
+    命中时抛出中断异常以终止当前 Agnes 节点的运行。调用方需在长轮询循环中定期调用。
+    """
+    try:
+        from comfy.model_management import throw_exception_if_processing_interrupted
+        throw_exception_if_processing_interrupted()
+    except ImportError:
+        # 兼容未公开该 API 的 ComfyUI 版本：静默跳过
+        pass
+
+def _summarize_payload(payload) -> dict:
+    """把请求体中的超长字符串（尤其 Base64 Data URI）压缩为摘要，便于完整打印结构而避免刷屏"""
+    import json as _json
+    out = {}
+    for k, v in payload.items():
+        if isinstance(v, str) and len(v) > 200:
+            out[k] = f"<str len={len(v)}: {v[:80]}...>"
+        elif isinstance(v, list):
+            out[k] = _summarize_payload({f"[{i}]": x for i, x in enumerate(v)})
+        elif isinstance(v, dict):
+            out[k] = _summarize_payload(v)
+        else:
+            out[k] = v
+    return out
+
+# ====== 腾讯云 COS（参考视频公网 URL）====== 
+# 临时开关：目前屏蔽 COS 方案，参考视频回退 Base64；需要恢复时改为 True
+COS_FEATURE_ENABLED = False
+
+def _load_cos_config() -> dict:
+    """读取腾讯云 COS 配置（存在 agnes_config.json 的 cos_* 键）"""
+    cfg = load_agnes_config()
+    return {
+        "secret_id": (cfg.get("cos_secret_id") or "").strip(),
+        "secret_key": (cfg.get("cos_secret_key") or "").strip(),
+        "bucket": (cfg.get("cos_bucket") or "").strip(),
+        "region": (cfg.get("cos_region") or "").strip(),
+        "domain": (cfg.get("cos_domain") or "").strip(),
+    }
+
+def _cos_enabled() -> bool:
+    c = _load_cos_config()
+    return all([c["secret_id"], c["secret_key"], c["bucket"], c["region"]])
+
+def _upload_to_cos(local_path: str):
+    """将本地视频上传到腾讯云 COS，返回公网直链；失败返回 None（回退 Base64）。
+    默认使用 `https://{bucket}.cos.{region}.myqcloud.com/{key}`，可配置自定义域名覆盖。
+    """
+    if not COS_FEATURE_ENABLED:
+        return None
+    if not _cos_enabled():
+        return None
+    try:
+        from qcloud_cos import CosConfig, CosS3Client
+        import uuid as _uuid
+        import requests as _req
+        c = _load_cos_config()
+        client = CosS3Client(CosConfig(
+            Region=c["region"],
+            SecretId=c["secret_id"],
+            SecretKey=c["secret_key"],
+            Scheme="https",
+        ))
+        ext = os.path.splitext(local_path)[1] or ".mp4"
+        import datetime as _dt
+        date_folder = _dt.datetime.now().strftime("%Y-%m-%d")
+        key = f"agnes/{date_folder}/{_uuid.uuid4().hex}{ext}"
+        client.upload_file(Bucket=c["bucket"], Key=key, LocalFilePath=local_path)
+
+        base = c["domain"].rstrip("/") if c["domain"] else f"{c['bucket']}.cos.{c['region']}.myqcloud.com"
+        url = f"https://{base}/{key}"
+
+        # 自检：确认公网可达且返回视频类型
+        resp = _req.get(url, stream=True, timeout=(5, 15))
+        ct = (resp.headers.get("Content-Type") or "").lower()
+        code = resp.status_code
+        resp.close()
+        if code == 200 and ct.startswith("video"):
+            print(f"[Agnes 2.5 付费] 参考视频已上传 COS: {url}")
+            return url
+        print(f"[Agnes 2.5 付费] COS 上传成功但自检未通过（HTTP {code}, Content-Type={ct!r}），回退 Base64")
+        return None
+    except ImportError:
+        print("[Agnes 2.5 付费] 未安装 cos-python-sdk-v5，无法上传 COS，回退 Base64。请在 ComfyUI 环境执行: pip install cos-python-sdk-v5")
+        return None
+    except Exception as e:
+        print(f"[Agnes 2.5 付费] COS 上传失败: {e}，回退 Base64")
+        return None
 
 # 有效帧数
 VALID_NUM_FRAMES = [81, 121, 161, 201, 241, 281, 321, 361, 401, 441]
@@ -288,6 +412,8 @@ class AgnesTextToVideo:
         stuck_count = 0
 
         for attempt in range(max_retries):
+            # 检测用户点击 Stop（中断），及时终止轮询
+            _raise_if_interrupted()
             try:
                 resp = requests.get(query_url, headers=headers, timeout=(5, 15))
                 resp.raise_for_status()
@@ -346,6 +472,8 @@ class AgnesTextToVideo:
                 with open(temp_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
+                            # 下载过程中检测中断，及时终止
+                            _raise_if_interrupted()
                             f.write(chunk)
                 print(f"[Agnes] 下载完成: {temp_path}")
                 return temp_path
@@ -660,6 +788,8 @@ class AgnesImageToVideo:
         stuck_count = 0
 
         for attempt in range(max_retries):
+            # 检测用户点击 Stop（中断），及时终止轮询
+            _raise_if_interrupted()
             try:
                 resp = requests.get(query_url, headers=headers, timeout=(5, 15))
                 resp.raise_for_status()
@@ -715,6 +845,8 @@ class AgnesImageToVideo:
                 with open(temp_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
+                            # 下载过程中检测中断，及时终止
+                            _raise_if_interrupted()
                             f.write(chunk)
                 print(f"[Agnes] 下载完成: {temp_path}")
                 return temp_path
@@ -1006,6 +1138,8 @@ class AgnesMultiImageToVideo:
         stuck_count = 0
 
         for attempt in range(max_retries):
+            # 检测用户点击 Stop（中断），及时终止轮询
+            _raise_if_interrupted()
             try:
                 resp = requests.get(query_url, headers=headers, timeout=(5, 15))
                 resp.raise_for_status()
@@ -1061,6 +1195,8 @@ class AgnesMultiImageToVideo:
                 with open(temp_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
+                            # 下载过程中检测中断，及时终止
+                            _raise_if_interrupted()
                             f.write(chunk)
                 print(f"[Agnes] 下载完成: {temp_path}")
                 return temp_path
@@ -1589,12 +1725,12 @@ class AgnesChat:
                     "tooltip": "在此输入您的问题"
                 }),
                 "thinking_enabled": ("BOOLEAN", {
-                    "default": True,
+                    "default": False,
                     "label": "思考模式",
                     "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
                 }),
                 "max_tokens": ("INT", {
-                    "default": 64000,
+                    "default": 16000,
                     "min": 64,
                     "max": 65536,
                     "step": 64,
@@ -1703,15 +1839,16 @@ class AgnesChat:
         import requests
         response_text = ""
 
+        # 检测用户点击 Stop（中断）：若已停止则不再发起请求
+        _raise_if_interrupted()
+
         try:
-            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 120))
+            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 600))
             http_response.raise_for_status()
             result = http_response.json()
-            choices = result.get('choices', [])
-            if choices:
-                response_text = choices[0].get('message', {}).get('content', '').strip()
+            response_text = _extract_chat_response(result)
         except requests.exceptions.Timeout:
-            raise RuntimeError("对话请求超时（120秒），请检查网络或稍后重试")
+            raise RuntimeError("对话请求超时（600秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
             resp = e.response
             status_code = resp.status_code if resp is not None else None
@@ -1766,12 +1903,12 @@ class AgnesVisionChat:
                     "tooltip": "在此输入您的问题（可结合图像提问）"
                 }),
                 "thinking_enabled": ("BOOLEAN", {
-                    "default": True,
+                    "default": False,
                     "label": "思考模式",
                     "tooltip": "启用后模型会先进行深度推理再给出回答，适用于复杂推理任务"
                 }),
                 "max_tokens": ("INT", {
-                    "default": 64000,
+                    "default": 16000,
                     "min": 64,
                     "max": 65536,
                     "step": 64,
@@ -1791,9 +1928,9 @@ class AgnesVisionChat:
                 }),
             },
             "optional": {
-                "images": ("IMAGE", {
+                "图像1": ("IMAGE", {
                     "forceInput": True,
-                    "tooltip": "输入图像（可选），支持多张图像组成的批次"
+                    "tooltip": "可选输入图像 1"
                 }),
                 "system_prompt": ("STRING", {
                     "forceInput": True,
@@ -1860,13 +1997,26 @@ class AgnesVisionChat:
             lines.append("————————————————————————")
         return "\n".join(lines)
 
-    def chat(self, model, user_prompt, thinking_enabled, max_tokens, temperature, memory_enabled=True, images=None, system_prompt=None, unique_id=None, extra_pnginfo=None):
+    def chat(self, model, user_prompt, thinking_enabled, max_tokens, temperature, memory_enabled=True, 图像1=None, system_prompt=None, unique_id=None, extra_pnginfo=None, **kwargs):
         api_key = get_api_key()
         if not api_key:
             raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
 
+        # 收集所有可选图像输入（图像1 为显式参数，图像2..N 由动态端口传入 **kwargs）
+        images_layers = {}
+        if 图像1 is not None:
+            images_layers[1] = 图像1
+        for key, value in kwargs.items():
+            if isinstance(key, str) and key.startswith("图像"):
+                try:
+                    idx = int(key[len("图像"):])
+                except ValueError:
+                    continue
+                if value is not None:
+                    images_layers[idx] = value
+
         if not user_prompt or user_prompt.strip() == "":
-            if images is None:
+            if not images_layers:
                 raise ValueError("请输入用户提示词")
         node_id = "vision_" + str(unique_id[0]) if unique_id else "vision_default"
 
@@ -1885,21 +2035,21 @@ class AgnesVisionChat:
         if memory_enabled:
             messages.extend(history)
 
+        # 将每个可选图像输入（可能含批次）转换为 data URI，合并进 content
+        image_uris = []
+        for idx in sorted(images_layers):
+            img = images_layers[idx]
+            if img.dim() == 4:
+                for i in range(img.shape[0]):
+                    image_uris.append(self._tensor_to_data_uri(img[i].unsqueeze(0)))
+            else:
+                image_uris.append(self._tensor_to_data_uri(img))
+
         # 构建用户消息 content（支持纯文本或图像+文本多模态）
         content_array = None
-        if images is not None:
+        if image_uris:
             content_array = [{"type": "text", "text": user_prompt}]
-            if images.dim() == 4:
-                batch_size = images.shape[0]
-                for i in range(batch_size):
-                    img_tensor = images[i].unsqueeze(0) if images.dim() == 4 else images
-                    data_uri = self._tensor_to_data_uri(img_tensor)
-                    content_array.append({
-                        "type": "image_url",
-                        "image_url": {"url": data_uri}
-                    })
-            else:
-                data_uri = self._tensor_to_data_uri(images)
+            for data_uri in image_uris:
                 content_array.append({
                     "type": "image_url",
                     "image_url": {"url": data_uri}
@@ -1931,15 +2081,16 @@ class AgnesVisionChat:
         import requests
         response_text = ""
 
+        # 检测用户点击 Stop（中断）：若已停止则不再发起请求
+        _raise_if_interrupted()
+
         try:
-            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 120))
+            http_response = requests.post(url, json=payload, headers=headers, timeout=(10, 600))
             http_response.raise_for_status()
             result = http_response.json()
-            choices = result.get('choices', [])
-            if choices:
-                response_text = choices[0].get('message', {}).get('content', '').strip()
+            response_text = _extract_chat_response(result)
         except requests.exceptions.Timeout:
-            raise RuntimeError("对话请求超时（120秒），请检查网络或稍后重试")
+            raise RuntimeError("对话请求超时（600秒），请检查网络或稍后重试")
         except requests.exceptions.RequestException as e:
             resp = e.response
             status_code = resp.status_code if resp is not None else None
@@ -2032,6 +2183,937 @@ class AgnesAssistantExpert:
         return (prompts.get(assistant, ""),)
 
 
+class Agnes25AllInOneVideo:
+    """
+    Agnes 2.5 全能视频节点：基于 agnes-video-2.5-flash 模型。
+    通过「模式」选择参数切换四种生成方式：
+    - 文生视频  -> API mode=text
+    - 图生视频  -> API mode=keyframe（仅首帧）
+    - 首尾帧    -> API mode=keyframe（首帧 + 尾帧）
+    - 全能参考  -> API mode=reference（参考图 + 可选参考音频）
+    API 约束：size 固定 "720P"，seconds 为字符串 "4"~"12"，n 固定 1。
+    """
+    # 用户模式 -> API 模式映射
+    MODE_MAP = {
+        "文生视频": "text",
+        "图生视频": "keyframe",
+        "首尾帧": "keyframe",
+        "全能参考": "reference",
+    }
+    ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "4:3", "3:4", "1:1", "21:9"]
+    # 参考模式最多支持 5 张图、3 段音频（Flash 图片上限 5）
+    REFERENCE_IMAGE_COUNT = 5
+    REFERENCE_AUDIO_COUNT = 3
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = {
+            "required": {
+                "模式": (list(cls.MODE_MAP.keys()), {
+                    "default": "文生视频",
+                    "tooltip": "选择生成模式，端口与参数将随模式自动切换",
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "A cinematic shot of a cat walking on the beach at sunset, soft ocean waves, warm golden lighting, realistic motion",
+                    "tooltip": "视频内容描述。Reference 模式可使用 <Picture N> 和 <Audio N> 指代素材",
+                }),
+                "seconds": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 12,
+                    "step": 1,
+                    "tooltip": "视频时长（秒），支持 4~12 秒",
+                }),
+                "aspect_ratio": (cls.ASPECT_RATIO_OPTIONS, {
+                    "default": "16:9",
+                    "tooltip": "视频画幅，固定输出 720P 对应分辨率（如 16:9 -> 1280x720）",
+                }),
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                    "tooltip": "随机种子",
+                }),
+            },
+            "optional": {
+                "首帧图": ("IMAGE", {"tooltip": "首帧参考图（图生视频/首尾帧模式使用）"}),
+                "尾帧图": ("IMAGE", {"tooltip": "尾帧参考图（首尾帧模式使用）"}),
+                "参考图1": ("IMAGE", {"tooltip": "参考图 1（全能参考模式使用）"}),
+                "参考图2": ("IMAGE", {"tooltip": "参考图 2（全能参考模式使用）"}),
+                "参考图3": ("IMAGE", {"tooltip": "参考图 3（全能参考模式使用）"}),
+                "参考图4": ("IMAGE", {"tooltip": "参考图 4（全能参考模式使用）"}),
+                "参考图5": ("IMAGE", {"tooltip": "参考图 5（全能参考模式使用）"}),
+                "参考音频1": ("AUDIO", {"tooltip": "参考音频 1（全能参考模式，可选）"}),
+                "参考音频2": ("AUDIO", {"tooltip": "参考音频 2（全能参考模式，可选）"}),
+                "参考音频3": ("AUDIO", {"tooltip": "参考音频 3（全能参考模式，可选）"}),
+            },
+        }
+        return inputs
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
+    RETURN_NAMES = ("frames", "audio", "fps")
+    FUNCTION = "generate_video"
+    CATEGORY = "智绘Store/Agens AI"
+    DESCRIPTION = "使用Agnes-Video-2.5-Flash生成视频：支持文生视频、图生视频、首尾帧、全能参考四种模式，通过「模式」参数自动切换端口与参数。需要先在ComfyUI设置中配置Agens的API Key。"
+
+    def generate_video(self, 模式, prompt, seconds, aspect_ratio, seed,
+                       首帧图=None, 尾帧图=None,
+                       参考图1=None, 参考图2=None, 参考图3=None, 参考图4=None, 参考图5=None,
+                       参考音频1=None, 参考音频2=None, 参考音频3=None):
+        api_key = get_api_key()
+        if not api_key:
+            raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
+
+        mode = self.MODE_MAP.get(模式, "text")
+        seconds_str = str(max(4, min(12, int(seconds))))
+
+        # 按模式构建媒体字段
+        media = {}
+        if mode == "text":
+            # 文生视频：不允许携带任何媒体字段
+            pass
+        elif mode == "keyframe":
+            first = self._image_to_url(首帧图) if 首帧图 is not None else None
+            last = self._image_to_url(尾帧图) if 尾帧图 is not None else None
+            if first is None and last is None:
+                raise ValueError("首尾帧/图生视频模式至少需要提供首帧或尾帧一张参考图")
+            if first is not None:
+                media["first_frame"] = first
+            if last is not None:
+                media["last_frame"] = last
+        elif mode == "reference":
+            images = []
+            for ref in [参考图1, 参考图2, 参考图3, 参考图4, 参考图5]:
+                if ref is not None:
+                    images.append(self._image_to_url(ref))
+            if len(images) > self.REFERENCE_IMAGE_COUNT:
+                print(f"[Agnes 2.5] 警告：Flash 参考图最多 {self.REFERENCE_IMAGE_COUNT} 张，已截取前 {self.REFERENCE_IMAGE_COUNT} 张")
+                images = images[:self.REFERENCE_IMAGE_COUNT]
+
+            audios = []
+            for ref in [参考音频1, 参考音频2, 参考音频3]:
+                if ref is not None:
+                    audios.append(self._audio_to_url(ref))
+
+            if not images and not audios:
+                raise ValueError("全能参考模式至少需要提供一张参考图或一段参考音频")
+            if images:
+                media["images"] = images
+            if audios:
+                media["audios"] = audios
+
+        # 构建请求体
+        payload = {
+            "model": "agnes-video-2.5-flash",
+            "prompt": prompt,
+            "mode": mode,
+            "seconds": seconds_str,
+            "size": "720P",
+            "aspect_ratio": aspect_ratio,
+            "seed": seed,
+            "n": 1,
+        }
+        payload.update(media)
+        print(f"[Agnes 2.5] 模式={模式} mode={mode}, media字段={list(media.keys())}")
+
+        # 完整打印构建的请求参数（超长 Base64 串压缩为摘要）
+        import json as _json
+        print("[Agnes 2.5] 完整请求参数:")
+        print(_json.dumps(_summarize_payload(payload), ensure_ascii=False, indent=2))
+
+        import requests
+        create_url = f"{BASE_URL}/v1/videos"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+        try:
+            response = requests.post(create_url, json=payload, headers=headers, timeout=(5, 180))
+            response.raise_for_status()
+            task_data = response.json()
+        except requests.exceptions.Timeout:
+            raise RuntimeError("创建任务超时（180秒），请检查网络或稍后重试")
+        except requests.exceptions.RequestException as e:
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"创建任务失败：{error_msg}")
+
+        video_id = task_data.get("video_id")
+        if not video_id:
+            raise RuntimeError(f"创建任务响应中没有 video_id：{str(task_data)[:300]}")
+
+        print(f"[Agnes 2.5] 任务已创建，video_id: {video_id}")
+
+        # 2.5 Flash 推荐使用 video_id + model_name 轮询
+        video_url = self._poll_for_result(video_id, api_key)
+        video_path = self._download_video(video_url)
+        frames_tensor, audio_data, fps = self._extract_frames_audio_fps(video_path)
+
+        try:
+            os.unlink(video_path)
+        except Exception:
+            pass
+
+        return frames_tensor, audio_data, fps
+
+    def _image_to_url(self, image_tensor: torch.Tensor) -> str:
+        """将图像 Tensor 转换为 Data URI（与现有节点一致）"""
+        import base64
+        from io import BytesIO
+        if image_tensor.dim() == 4:
+            img_tensor = image_tensor[0]
+        else:
+            img_tensor = image_tensor
+        img_np = (img_tensor.cpu().numpy() * 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_np, mode='RGB')
+        buffer = BytesIO()
+        pil_img.save(buffer, format='PNG')
+        b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{b64}"
+
+    def _audio_to_url(self, audio) -> str:
+        """将 ComfyUI AUDIO（dict / Tensor / list 等形态）转换为 data:audio/wav;base64 Data URI"""
+        import base64
+        import io
+        import wave
+        try:
+            # 兼容多种 AUDIO 形态：
+            # - dict: {"waveform": ..., "sample_rate": ...}
+            # - list: [[samples]] 或 [sample_rate, [[samples]]]
+            # - torch.Tensor / numpy 数组
+            sample_rate = 16000
+            waveform = None
+            if isinstance(audio, dict):
+                waveform = audio.get("waveform")
+                sample_rate = int(audio.get("sample_rate", sample_rate))
+            elif isinstance(audio, (list, tuple)):
+                for item in audio:
+                    if isinstance(item, dict):
+                        if waveform is None and item.get("waveform") is not None:
+                            waveform = item["waveform"]
+                            sample_rate = int(item.get("sample_rate", sample_rate))
+                    elif isinstance(item, (list, tuple)):
+                        # 形如 [[samples]]：取第一个子列表作为波形；若是 [sr, [[...]]] 形式，第一个元素为声道数/采样率
+                        for sub in item:
+                            if hasattr(sub, "shape"):
+                                waveform = sub
+                                break
+                    elif hasattr(item, "shape"):
+                        waveform = item
+                    elif isinstance(item, (int, float)) and sample_rate == 16000 and len(audio) >= 2:
+                        sample_rate = int(item)
+            elif hasattr(audio, "shape"):
+                # 直接是 torch.Tensor / numpy 数组
+                waveform = audio
+            if waveform is None:
+                raise ValueError("参考音频为空或格式无法识别")
+            wv = waveform.cpu().numpy() if hasattr(waveform, "cpu") else np.asarray(waveform)
+            if wv.size == 0:
+                raise ValueError("参考音频为空")
+            mono = np.clip(wv, -1.0, 1.0).astype(np.float32).reshape(-1)
+            pcm = (mono * 32767).astype(np.int16)
+            buf = io.BytesIO()
+            with wave.open(buf, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(pcm.tobytes())
+            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f"data:audio/wav;base64,{b64}"
+        except Exception as e:
+            raise ValueError(f"参考音频转换失败：{str(e)}")
+
+    def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 360, interval: float = 3.0) -> str:
+        """轮询查询视频结果（video_id + model_name）。
+        基础间隔默认 3 秒；遇到 429 限流时按指数退避（2x 直至上限 60 秒）以尊重接口频率限制。
+        """
+        import requests
+        query_url = f"{BASE_URL}/agnesapi?video_id={video_id}&model_name=agnes-video-2.5-flash"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+        from comfy.utils import ProgressBar
+        pbar = ProgressBar(100)
+
+        last_progress = -1
+        stuck_count = 0
+        rate_limit_backoff = 0  # 连续 429 时的退避秒数
+
+        for attempt in range(max_retries):
+            # 检测用户点击 Stop（中断），及时终止轮询
+            _raise_if_interrupted()
+            try:
+                resp = requests.get(query_url, headers=headers, timeout=(5, 15))
+                resp.raise_for_status()
+                # 请求成功，重置限流退避
+                rate_limit_backoff = 0
+
+                result = resp.json()
+                status = result.get("status")
+                progress = result.get("progress", 0)
+
+                pbar.update_absolute(progress)
+
+                if progress == last_progress and status == "in_progress":
+                    stuck_count += 1
+                    if stuck_count >= 15:
+                        print(f"[Agnes 2.5] 警告: 进度停滞在 {progress}% 超过15次，持续等待...")
+                        stuck_count = 0
+                else:
+                    last_progress = progress
+                    stuck_count = 0
+
+                if status == "completed" or result.get("internal_status") == "completed":
+                    print(f"[Agnes 2.5] 视频生成完成，进度: {progress}%")
+                    video_url = result.get("url")
+                    if not video_url:
+                        metadata = result.get("metadata", {}) or {}
+                        video_url = metadata.get("url")
+                    if not video_url:
+                        raise RuntimeError(f"任务完成但未找到视频URL：{str(result)[:300]}")
+                    return video_url
+                elif status == "failed":
+                    error_msg = result.get("error", "未知错误")
+                    raise RuntimeError(f"视频生成失败，原因：{error_msg}")
+                else:
+                    print(f"[Agnes 2.5] 状态: {status}, 进度: {progress}%")
+                    time.sleep(interval)
+            except requests.exceptions.RequestException as e:
+                status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+                if status_code == 429:
+                    # 触发限流：指数退避，尊重 Retry-After 响应头（若有）
+                    retry_after = None
+                    if hasattr(e, 'response') and e.response is not None:
+                        retry_after = e.response.headers.get("Retry-After")
+                    if retry_after and str(retry_after).isdigit():
+                        wait = int(retry_after)
+                    else:
+                        wait = min(60, interval * (2 ** min(rate_limit_backoff, 5)))
+                    rate_limit_backoff += 1
+                    print(f"[Agnes 2.5] 触发限流（429），{wait} 秒后重试...")
+                    time.sleep(wait)
+                else:
+                    print(f"[Agnes 2.5] 查询出错（HTTP {status_code}）: {e}, {interval} 秒后重试...")
+                    time.sleep(interval)
+        raise RuntimeError(f"视频生成超时（已等待 {max_retries * interval} 秒），video_id: {video_id}")
+
+    def _download_video(self, url: str) -> str:
+        """下载视频到临时目录"""
+        import requests
+        temp_dir = folder_paths.get_temp_directory()
+        temp_file = tempfile.NamedTemporaryFile(dir=temp_dir, suffix=".mp4", delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+        print(f"[Agnes 2.5] 下载视频: {url}")
+        max_download_retries = 2
+        for attempt in range(max_download_retries + 1):
+            try:
+                response = requests.get(url, stream=True, timeout=(10, 120))
+                response.raise_for_status()
+                with open(temp_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            # 下载过程中检测中断，及时终止
+                            _raise_if_interrupted()
+                            f.write(chunk)
+                print(f"[Agnes 2.5] 下载完成: {temp_path}")
+                return temp_path
+            except Exception as e:
+                if attempt < max_download_retries:
+                    print(f"[Agnes 2.5] 下载失败 ({attempt+1}/{max_download_retries+1})，5秒后重试: {e}")
+                    time.sleep(5)
+                else:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise RuntimeError(f"下载视频失败：{str(e)}")
+
+    def _extract_frames_audio_fps(self, video_path: str) -> Tuple[torch.Tensor, Optional[Dict], float]:
+        """提取视频帧、音频与实际帧率（fps 读取失败回退 24.0）"""
+        if not CV2_AVAILABLE:
+            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise RuntimeError(f"无法打开视频: {video_path}")
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = fps if fps and fps > 0 else 24.0
+
+        frames = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
+            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
+            frames.append(img_tensor)
+        cap.release()
+
+        if not frames:
+            raise RuntimeError("未提取到任何帧")
+        frames_tensor = torch.stack(frames, dim=0)
+        print(f"[Agnes 2.5] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}，fps: {fps}")
+
+        audio_data = self._extract_audio(video_path)
+        return frames_tensor, audio_data, float(fps)
+
+    def _extract_audio(self, video_path: str) -> Optional[Dict]:
+        """使用 ffmpeg + wave 提取音频，输出波形形状 [1, 1, samples]"""
+        try:
+            import imageio_ffmpeg
+            import subprocess
+            import wave
+
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp_audio.close()
+
+            cmd = [
+                ffmpeg_exe, "-i", video_path,
+                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                "-y", temp_audio.name
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                print(f"[Agnes 2.5] ffmpeg 提取失败，返回码: {result.returncode}")
+                return None
+
+            with wave.open(temp_audio.name, 'rb') as wav:
+                sample_rate = wav.getframerate()
+                n_frames = wav.getnframes()
+                audio_data = wav.readframes(n_frames)
+                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
+
+            max_samples = sample_rate * 30
+            if waveform.shape[-1] > max_samples:
+                waveform = waveform[:, :, :max_samples]
+
+            print(f"[Agnes 2.5] 音频提取成功，波形形状: {waveform.shape}")
+            return {"waveform": waveform, "sample_rate": sample_rate}
+        except Exception as e:
+            print(f"[Agnes 2.5] 音频提取失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
+                os.unlink(temp_audio.name)
+
+
+class Agnes25AllInOneVideoPro:
+    """
+    Agnes 2.5 全能视频（付费）节点：基于 agnes-video-2.5 模型，是「免费版」的升级。
+    通过「模式」选择参数切换四种生成方式：
+    - 文生视频  -> API mode=text
+    - 图生视频  -> API mode=keyframe（仅首帧）
+    - 首尾帧    -> API mode=keyframe（首帧 + 尾帧）
+    - 全能参考  -> API mode=reference（参考图 + 参考音频 + 参考视频）
+    相比免费版：新增 size 分辨率档位（720P/960P/2K）；全能参考支持视频参考（videos）。
+    参考视频上传后转换为 Base64 Data URI 再传给 API。
+    API 约束：seconds 为字符串 "4"~"12"，n 固定 1。
+    """
+    MODE_MAP = {
+        "文生视频": "text",
+        "图生视频": "keyframe",
+        "首尾帧": "keyframe",
+        "全能参考": "reference",
+    }
+    ASPECT_RATIO_OPTIONS = ["16:9", "9:16", "4:3", "3:4", "1:1", "21:9"]
+    SIZE_OPTIONS = ["720P", "960P", "2K"]
+    REFERENCE_IMAGE_COUNT = 5
+    REFERENCE_AUDIO_COUNT = 3
+    REFERENCE_VIDEO_COUNT = 3
+    MODEL_NAME = "agnes-video-2.5"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        inputs = {
+            "required": {
+                "模式": (list(cls.MODE_MAP.keys()), {
+                    "default": "文生视频",
+                    "tooltip": "选择生成模式，端口与参数将随模式自动切换",
+                }),
+                "prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "A cinematic shot of a cat walking on the beach at sunset, soft ocean waves, warm golden lighting, realistic motion",
+                    "tooltip": "视频内容描述。Reference 模式可使用 <Picture N>、<Audio N>、<Video N> 指代素材",
+                }),
+                "seconds": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 12,
+                    "step": 1,
+                    "tooltip": "视频时长（秒），支持 4~12 秒",
+                }),
+                "aspect_ratio": (cls.ASPECT_RATIO_OPTIONS, {
+                    "default": "16:9",
+                    "tooltip": "视频画幅（如 16:9 -> 1280x720）",
+                }),
+                "size": (cls.SIZE_OPTIONS, {
+                    "default": "720P",
+                    "tooltip": "输出分辨率档位：720P / 960P / 2K",
+                }),
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                    "tooltip": "随机种子",
+                }),
+            },
+            "optional": {
+                "首帧图": ("IMAGE", {"tooltip": "首帧参考图（图生视频/首尾帧模式使用）"}),
+                "尾帧图": ("IMAGE", {"tooltip": "尾帧参考图（首尾帧模式使用）"}),
+                "参考图1": ("IMAGE", {"tooltip": "参考图 1（全能参考模式使用）"}),
+                "参考图2": ("IMAGE", {"tooltip": "参考图 2（全能参考模式使用）"}),
+                "参考图3": ("IMAGE", {"tooltip": "参考图 3（全能参考模式使用）"}),
+                "参考图4": ("IMAGE", {"tooltip": "参考图 4（全能参考模式使用）"}),
+                "参考图5": ("IMAGE", {"tooltip": "参考图 5（全能参考模式使用）"}),
+                "参考音频1": ("AUDIO", {"tooltip": "参考音频 1（全能参考模式，可选）"}),
+                "参考音频2": ("AUDIO", {"tooltip": "参考音频 2（全能参考模式，可选）"}),
+                "参考音频3": ("AUDIO", {"tooltip": "参考音频 3（全能参考模式，可选）"}),
+                "参考视频1": ("VIDEO", {"tooltip": "参考视频 1（全能参考模式，可选），上传后自动转为 Base64"}),
+                "参考视频2": ("VIDEO", {"tooltip": "参考视频 2（全能参考模式，可选），上传后自动转为 Base64"}),
+                "参考视频3": ("VIDEO", {"tooltip": "参考视频 3（全能参考模式，可选），上传后自动转为 Base64"}),
+            },
+        }
+        return inputs
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
+    RETURN_NAMES = ("frames", "audio", "fps")
+    FUNCTION = "generate_video"
+    CATEGORY = "智绘Store/Agens AI"
+    DESCRIPTION = "使用Agnes-Video-2.5生成视频（付费）：支持文生视频、图生视频、首尾帧、全能参考四种模式，支持 720P/960P/2K 分辨率，全能参考可含参考视频。需要先在ComfyUI设置中配置Agens的API Key。"
+
+    def generate_video(self, 模式, prompt, seconds, aspect_ratio, size, seed,
+                       首帧图=None, 尾帧图=None,
+                       参考图1=None, 参考图2=None, 参考图3=None, 参考图4=None, 参考图5=None,
+                       参考音频1=None, 参考音频2=None, 参考音频3=None,
+                       参考视频1=None, 参考视频2=None, 参考视频3=None):
+        api_key = get_api_key()
+        if not api_key:
+            raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
+
+        mode = self.MODE_MAP.get(模式, "text")
+        seconds_str = str(max(4, min(12, int(seconds))))
+
+        # 按模式构建媒体字段
+        media = {}
+        if mode == "text":
+            pass
+        elif mode == "keyframe":
+            first = self._image_to_url(首帧图) if 首帧图 is not None else None
+            last = self._image_to_url(尾帧图) if 尾帧图 is not None else None
+            if first is None and last is None:
+                raise ValueError("首尾帧/图生视频模式至少需要提供首帧或尾帧一张参考图")
+            if first is not None:
+                media["first_frame"] = first
+            if last is not None:
+                media["last_frame"] = last
+        elif mode == "reference":
+            images = []
+            for ref in [参考图1, 参考图2, 参考图3, 参考图4, 参考图5]:
+                if ref is not None:
+                    images.append(self._image_to_url(ref))
+            if len(images) > self.REFERENCE_IMAGE_COUNT:
+                print(f"[Agnes 2.5 付费] 警告：参考图最多 {self.REFERENCE_IMAGE_COUNT} 张，已截取前 {self.REFERENCE_IMAGE_COUNT} 张")
+                images = images[:self.REFERENCE_IMAGE_COUNT]
+
+            audios = []
+            for ref in [参考音频1, 参考音频2, 参考音频3]:
+                if ref is not None:
+                    audios.append(self._audio_to_url(ref))
+
+            videos = []
+            for ref in [参考视频1, 参考视频2, 参考视频3]:
+                if ref is not None:
+                    videos.append(self._video_to_ref(ref))
+
+            if not images and not audios and not videos:
+                raise ValueError("全能参考模式至少需要提供一张参考图、一段参考音频或一段参考视频")
+            if images:
+                media["images"] = images
+            if audios:
+                media["audios"] = audios
+            if videos:
+                media["videos"] = videos
+
+        # 构建请求体
+        payload = {
+            "model": self.MODEL_NAME,
+            "prompt": prompt,
+            "mode": mode,
+            "seconds": seconds_str,
+            "size": size,
+            "aspect_ratio": aspect_ratio,
+            "seed": seed,
+            "n": 1,
+        }
+        payload.update(media)
+        print(f"[Agnes 2.5 付费] 模式={模式} mode={mode}, size={size}, media字段={list(media.keys())}")
+
+        # 完整打印构建的请求参数（超长 Base64 串压缩为摘要）
+        import json as _json
+        print("[Agnes 2.5 付费] 完整请求参数:")
+        print(_json.dumps(_summarize_payload(payload), ensure_ascii=False, indent=2))
+
+        import requests
+        create_url = f"{BASE_URL}/v1/videos"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+        try:
+            response = requests.post(create_url, json=payload, headers=headers, timeout=(5, 180))
+            response.raise_for_status()
+            task_data = response.json()
+        except requests.exceptions.Timeout:
+            raise RuntimeError("创建任务超时（180秒），请检查网络或稍后重试")
+        except requests.exceptions.RequestException as e:
+            status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+            response_body = e.response.text[:600] if (hasattr(e, 'response') and e.response is not None) else ""
+            error_msg = _get_api_error(status_code, response_body)
+            raise RuntimeError(f"创建任务失败：{error_msg}")
+
+        video_id = task_data.get("video_id")
+        if not video_id:
+            raise RuntimeError(f"创建任务响应中没有 video_id：{str(task_data)[:300]}")
+
+        print(f"[Agnes 2.5 付费] 任务已创建，video_id: {video_id}")
+
+        video_url = self._poll_for_result(video_id, api_key)
+        video_path = self._download_video(video_url)
+        frames_tensor, audio_data, fps = self._extract_frames_audio_fps(video_path)
+
+        try:
+            os.unlink(video_path)
+        except Exception:
+            pass
+
+        return frames_tensor, audio_data, fps
+
+    def _image_to_url(self, image_tensor: torch.Tensor) -> str:
+        """将图像 Tensor 转换为 Data URI"""
+        import base64
+        from io import BytesIO
+        if image_tensor.dim() == 4:
+            img_tensor = image_tensor[0]
+        else:
+            img_tensor = image_tensor
+        img_np = (img_tensor.cpu().numpy() * 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_np, mode='RGB')
+        buffer = BytesIO()
+        pil_img.save(buffer, format='PNG')
+        b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{b64}"
+
+    def _audio_to_url(self, audio) -> str:
+        """将 ComfyUI AUDIO（dict / Tensor / list 等形态）转换为 data:audio/wav;base64 Data URI"""
+        import base64
+        import io
+        import wave
+        try:
+            # 兼容多种 AUDIO 形态：
+            # - dict: {"waveform": ..., "sample_rate": ...}
+            # - list: [[samples]] 或 [sample_rate, [[samples]]]
+            # - torch.Tensor / numpy 数组
+            sample_rate = 16000
+            waveform = None
+            if isinstance(audio, dict):
+                waveform = audio.get("waveform")
+                sample_rate = int(audio.get("sample_rate", sample_rate))
+            elif isinstance(audio, (list, tuple)):
+                for item in audio:
+                    if isinstance(item, dict):
+                        if waveform is None and item.get("waveform") is not None:
+                            waveform = item["waveform"]
+                            sample_rate = int(item.get("sample_rate", sample_rate))
+                    elif isinstance(item, (list, tuple)):
+                        # 形如 [[samples]]：取第一个子列表作为波形；若是 [sr, [[...]]] 形式，第一个元素为声道数/采样率
+                        for sub in item:
+                            if hasattr(sub, "shape"):
+                                waveform = sub
+                                break
+                    elif hasattr(item, "shape"):
+                        waveform = item
+                    elif isinstance(item, (int, float)) and sample_rate == 16000 and len(audio) >= 2:
+                        sample_rate = int(item)
+            elif hasattr(audio, "shape"):
+                # 直接是 torch.Tensor / numpy 数组
+                waveform = audio
+            if waveform is None:
+                raise ValueError("参考音频为空或格式无法识别")
+            wv = waveform.cpu().numpy() if hasattr(waveform, "cpu") else np.asarray(waveform)
+            if wv.size == 0:
+                raise ValueError("参考音频为空")
+            mono = np.clip(wv, -1.0, 1.0).astype(np.float32).reshape(-1)
+            pcm = (mono * 32767).astype(np.int16)
+            buf = io.BytesIO()
+            with wave.open(buf, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(pcm.tobytes())
+            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f"data:audio/wav;base64,{b64}"
+        except Exception as e:
+            raise ValueError(f"参考音频转换失败：{str(e)}")
+
+    def _video_to_ref(self, video) -> dict:
+        """将 VIDEO 类型的参考视频转换为 videos 对象 {url: Data URI}。
+        - 若值已是 http(s)/data 链接则直接使用；
+        - 兼容 ComfyUI 内置 LoadVideo 输出的 VideoFromFile 对象（get_stream_source -> str 路径 或 io.BytesIO）；
+        - 其余视为文件路径/文件名，读取后 base64 编码为 data:video/...;base64 再传给 API。
+        """
+        import base64 as _b64
+        import io as _io
+
+        # 1. ComfyUI 内置 VIDEO 容器对象（VideoFromFile）
+        if hasattr(video, "get_stream_source"):
+            try:
+                source = video.get_stream_source()
+            except Exception:
+                source = None
+            if isinstance(source, _io.BytesIO):
+                data = source.read()
+                b64 = _b64.b64encode(data).decode("utf-8")
+                print(f"[Agnes 2.5 付费] 参考视频已转换为 Base64 ({len(data)} bytes, video/mp4)")
+                return {"url": f"data:video/mp4;base64,{b64}"}
+            elif isinstance(source, str) and source.strip():
+                video = source.strip()
+            else:
+                raise ValueError("参考视频解析失败：VideoFromFile 未返回有效路径或字节流")
+
+        # 2. 提取可用的 url / 路径字段
+        url = None
+        if isinstance(video, dict):
+            url = (video.get("url") or video.get("path") or video.get("filename")
+                   or video.get("name") or video.get("source"))
+        elif isinstance(video, str):
+            url = video
+        elif hasattr(video, "url"):
+            url = video.url
+        elif hasattr(video, "filename"):
+            url = video.filename
+        elif hasattr(video, "path"):
+            url = video.path
+        if not url:
+            raise ValueError("参考视频解析失败：未获取到视频文件或URL，请连接输出 VIDEO 类型的节点")
+
+        url = str(url).strip()
+        if url.startswith(("http://", "https://", "data:")):
+            return {"url": url}
+
+        # 3. 解析为绝对文件路径并读取，base64 编码
+        path = url
+        try:
+            path = folder_paths.get_annotated_filepath(url)
+        except Exception:
+            path = url
+        if not os.path.exists(path):
+            raise ValueError(f"参考视频文件不存在：{path}")
+
+        # 优先：若配置了腾讯云 COS，则上传拿公网 URL
+        public_url = _upload_to_cos(path)
+        if public_url:
+            return {"url": public_url}
+
+        with open(path, "rb") as f:
+            data = f.read()
+        ext = os.path.splitext(path)[1].lower().lstrip(".")
+        mime = {
+            "mp4": "video/mp4",
+            "webm": "video/webm",
+            "mov": "video/quicktime",
+            "mkv": "video/x-matroska",
+            "avi": "video/x-msvideo",
+        }.get(ext, "video/mp4")
+        b64 = _b64.b64encode(data).decode("utf-8")
+        print(f"[Agnes 2.5 付费] 参考视频已转换为 Base64 ({len(data)} bytes, {mime})")
+        return {"url": f"data:{mime};base64,{b64}"}
+
+    def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 360, interval: float = 3.0) -> str:
+        """轮询查询视频结果（video_id + model_name=agnes-video-2.5）。基础间隔 3 秒；429 时指数退避；支持中断"""
+        import requests
+        query_url = f"{BASE_URL}/agnesapi?video_id={video_id}&model_name={self.MODEL_NAME}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+        from comfy.utils import ProgressBar
+        pbar = ProgressBar(100)
+
+        last_progress = -1
+        stuck_count = 0
+        rate_limit_backoff = 0
+
+        for attempt in range(max_retries):
+            _raise_if_interrupted()
+            try:
+                resp = requests.get(query_url, headers=headers, timeout=(5, 15))
+                resp.raise_for_status()
+                rate_limit_backoff = 0
+
+                result = resp.json()
+                status = result.get("status")
+                progress = result.get("progress", 0)
+
+                pbar.update_absolute(progress)
+
+                if progress == last_progress and status == "in_progress":
+                    stuck_count += 1
+                    if stuck_count >= 15:
+                        print(f"[Agnes 2.5 付费] 警告: 进度停滞在 {progress}% 超过15次，持续等待...")
+                        stuck_count = 0
+                else:
+                    last_progress = progress
+                    stuck_count = 0
+
+                if status == "completed" or result.get("internal_status") == "completed":
+                    print(f"[Agnes 2.5 付费] 视频生成完成，进度: {progress}%")
+                    video_url = result.get("url")
+                    if not video_url:
+                        metadata = result.get("metadata", {}) or {}
+                        video_url = metadata.get("url")
+                    if not video_url:
+                        raise RuntimeError(f"任务完成但未找到视频URL：{str(result)[:300]}")
+                    return video_url
+                elif status == "failed":
+                    error_msg = result.get("error", "未知错误")
+                    raise RuntimeError(f"视频生成失败，原因：{error_msg}")
+                else:
+                    print(f"[Agnes 2.5 付费] 状态: {status}, 进度: {progress}%")
+                    time.sleep(interval)
+            except requests.exceptions.RequestException as e:
+                status_code = e.response.status_code if (hasattr(e, 'response') and e.response is not None) else None
+                if status_code == 429:
+                    retry_after = None
+                    if hasattr(e, 'response') and e.response is not None:
+                        retry_after = e.response.headers.get("Retry-After")
+                    if retry_after and str(retry_after).isdigit():
+                        wait = int(retry_after)
+                    else:
+                        wait = min(60, interval * (2 ** min(rate_limit_backoff, 5)))
+                    rate_limit_backoff += 1
+                    print(f"[Agnes 2.5 付费] 触发限流（429），{wait} 秒后重试...")
+                    time.sleep(wait)
+                else:
+                    print(f"[Agnes 2.5 付费] 查询出错（HTTP {status_code}）: {e}, {interval} 秒后重试...")
+                    time.sleep(interval)
+        raise RuntimeError(f"视频生成超时（已等待 {max_retries * interval} 秒），video_id: {video_id}")
+
+    def _download_video(self, url: str) -> str:
+        """下载视频到临时目录"""
+        import requests
+        temp_dir = folder_paths.get_temp_directory()
+        temp_file = tempfile.NamedTemporaryFile(dir=temp_dir, suffix=".mp4", delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+        print(f"[Agnes 2.5 付费] 下载视频: {url}")
+        max_download_retries = 2
+        for attempt in range(max_download_retries + 1):
+            try:
+                response = requests.get(url, stream=True, timeout=(10, 120))
+                response.raise_for_status()
+                with open(temp_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            _raise_if_interrupted()
+                            f.write(chunk)
+                print(f"[Agnes 2.5 付费] 下载完成: {temp_path}")
+                return temp_path
+            except Exception as e:
+                if attempt < max_download_retries:
+                    print(f"[Agnes 2.5 付费] 下载失败 ({attempt+1}/{max_download_retries+1})，5秒后重试: {e}")
+                    time.sleep(5)
+                else:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise RuntimeError(f"下载视频失败：{str(e)}")
+
+    def _extract_frames_audio_fps(self, video_path: str) -> Tuple[torch.Tensor, Optional[Dict], float]:
+        """提取视频帧、音频与实际帧率（fps 读取失败回退 24.0）"""
+        if not CV2_AVAILABLE:
+            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise RuntimeError(f"无法打开视频: {video_path}")
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = fps if fps and fps > 0 else 24.0
+
+        frames = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
+            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
+            frames.append(img_tensor)
+        cap.release()
+
+        if not frames:
+            raise RuntimeError("未提取到任何帧")
+        frames_tensor = torch.stack(frames, dim=0)
+        print(f"[Agnes 2.5 付费] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}，fps: {fps}")
+
+        audio_data = self._extract_audio(video_path)
+        return frames_tensor, audio_data, float(fps)
+
+    def _extract_audio(self, video_path: str) -> Optional[Dict]:
+        """使用 ffmpeg + wave 提取音频，输出波形形状 [1, 1, samples]"""
+        try:
+            import imageio_ffmpeg
+            import subprocess
+            import wave
+
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp_audio.close()
+
+            cmd = [
+                ffmpeg_exe, "-i", video_path,
+                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+                "-y", temp_audio.name
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                print(f"[Agnes 2.5 付费] ffmpeg 提取失败，返回码: {result.returncode}")
+                return None
+
+            with wave.open(temp_audio.name, 'rb') as wav:
+                sample_rate = wav.getframerate()
+                n_frames = wav.getnframes()
+                audio_data = wav.readframes(n_frames)
+                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
+
+            max_samples = sample_rate * 30
+            if waveform.shape[-1] > max_samples:
+                waveform = waveform[:, :, :max_samples]
+
+            print(f"[Agnes 2.5 付费] 音频提取成功，波形形状: {waveform.shape}")
+            return {"waveform": waveform, "sample_rate": sample_rate}
+        except Exception as e:
+            print(f"[Agnes 2.5 付费] 音频提取失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
+                os.unlink(temp_audio.name)
+
+
 # 节点注册
 NODE_CLASS_MAPPINGS = {
     "AgnesTextToVideo": AgnesTextToVideo,
@@ -2042,7 +3124,8 @@ NODE_CLASS_MAPPINGS = {
     "AgnesChat": AgnesChat,
     "AgnesVisionChat": AgnesVisionChat,
     "AgnesAssistantExpert": AgnesAssistantExpert,
-    # "AgnesMultiImageToImage": AgnesMultiImageToImage,
+    "Agnes25AllInOneVideo": Agnes25AllInOneVideo,
+    "Agnes25AllInOneVideoPro": Agnes25AllInOneVideoPro,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -2054,7 +3137,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AgnesChat": "Agnes 文本对话",
     "AgnesVisionChat": "Agnes 图像理解对话",
     "AgnesAssistantExpert": "Agnes 助手专家",
-    # "AgnesMultiImageToImage": "Agnes 多图编辑",
+    "Agnes25AllInOneVideo": "Agnes 2.5 全能视频（免费）",
+    "Agnes25AllInOneVideoPro": "Agnes 2.5 全能视频（付费）",
 }
 
 

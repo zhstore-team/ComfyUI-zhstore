@@ -303,9 +303,9 @@
         "name": "Memory",
         "tooltip": "When enabled, preserves conversation context for multi-turn dialogue. When disabled, each conversation is independent."
       },
-      "images": {
-        "name": "Images",
-        "tooltip": "Input images (optional), supports batched images"
+      "图像1": {
+        "name": "Image 1",
+        "tooltip": "Optional input image 1"
       },
       "system_prompt": {
         "name": "System Prompt",
@@ -652,6 +652,182 @@
       "markdown": {
         "name": "Markdown Text",
         "tooltip": "Markdown formatted text to preview, supports headings, tables, lists, code blocks, bold, italic, etc."
+      }
+    }
+  },
+  "Agnes25AllInOneVideo": {
+    "display_name": "Agnes 2.5 All-in-One Video (Free)",
+    "description": "Generate video using Agnes-Video-2.5-Flash model. Supports four modes: text-to-video, image-to-video, first/last frame, and all-in-one reference. Switch ports and parameters automatically via the mode selector. Need to configure API Key in ComfyUI settings.",
+    "inputs": {
+      "模式": {
+        "name": "Mode",
+        "tooltip": "Select generation mode, ports and parameters switch automatically"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Video content description. In Reference mode you can use <Picture N> and <Audio N> to reference assets"
+      },
+      "seconds": {
+        "name": "seconds",
+        "tooltip": "Video duration (seconds), supports 4 to 12 seconds"
+      },
+      "aspect_ratio": {
+        "name": "aspect_ratio",
+        "tooltip": "Video aspect ratio, fixed 720P output resolution (e.g. 16:9 -> 1280x720)"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      },
+      "首帧图": {
+        "name": "First frame",
+        "tooltip": "First frame reference image (used in image-to-video / first-last-frame modes)"
+      },
+      "尾帧图": {
+        "name": "Last frame",
+        "tooltip": "Last frame reference image (used in first-last-frame mode)"
+      },
+      "参考图1": {
+        "name": "Reference image 1",
+        "tooltip": "Reference image 1 (used in all-in-one reference mode)"
+      },
+      "参考图2": {
+        "name": "Reference image 2",
+        "tooltip": "Reference image 2 (used in all-in-one reference mode)"
+      },
+      "参考图3": {
+        "name": "Reference image 3",
+        "tooltip": "Reference image 3 (used in all-in-one reference mode)"
+      },
+      "参考图4": {
+        "name": "Reference image 4",
+        "tooltip": "Reference image 4 (used in all-in-one reference mode)"
+      },
+      "参考图5": {
+        "name": "Reference image 5",
+        "tooltip": "Reference image 5 (used in all-in-one reference mode)"
+      },
+      "参考音频1": {
+        "name": "Reference audio 1",
+        "tooltip": "Reference audio 1 (all-in-one reference mode, optional)"
+      },
+      "参考音频2": {
+        "name": "Reference audio 2",
+        "tooltip": "Reference audio 2 (all-in-one reference mode, optional)"
+      },
+      "参考音频3": {
+        "name": "Reference audio 3",
+        "tooltip": "Reference audio 3 (all-in-one reference mode, optional)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "frames",
+        "tooltip": "Generated video frame sequence (RGB images), shape [N, H, W, C]"
+      },
+      "1": {
+        "name": "audio",
+        "tooltip": "Audio data from the video (None if no audio), contains waveform and sample_rate"
+      },
+      "2": {
+        "name": "fps",
+        "tooltip": "Frame rate (FPS) of the video"
+      }
+    }
+  },
+  "Agnes25AllInOneVideoPro": {
+    "display_name": "Agnes 2.5 All-in-One Video (Paid)",
+    "description": "Generate video using Agnes-Video-2.5 (paid). Supports four modes: text-to-video, image-to-video, first/last frame, and all-in-one reference. Supports 720P/960P/2K resolutions; the all-in-one reference mode can include reference videos. Need to configure API Key in ComfyUI settings.",
+    "inputs": {
+      "模式": {
+        "name": "Mode",
+        "tooltip": "Select generation mode, ports and parameters switch automatically"
+      },
+      "prompt": {
+        "name": "prompt",
+        "tooltip": "Video content description. In Reference mode you can use <Picture N>, <Audio N>, <Video N>"
+      },
+      "seconds": {
+        "name": "seconds",
+        "tooltip": "Video duration (seconds), supports 4 to 12 seconds"
+      },
+      "aspect_ratio": {
+        "name": "aspect_ratio",
+        "tooltip": "Video aspect ratio (e.g. 16:9 -> 1280x720)"
+      },
+      "size": {
+        "name": "size",
+        "tooltip": "Output resolution tier: 720P / 960P / 2K"
+      },
+      "seed": {
+        "name": "seed",
+        "tooltip": "Random seed"
+      },
+      "首帧图": {
+        "name": "First frame",
+        "tooltip": "First frame reference image (used in image-to-video / first-last-frame modes)"
+      },
+      "尾帧图": {
+        "name": "Last frame",
+        "tooltip": "Last frame reference image (used in first-last-frame mode)"
+      },
+      "参考图1": {
+        "name": "Reference image 1",
+        "tooltip": "Reference image 1 (used in all-in-one reference mode)"
+      },
+      "参考图2": {
+        "name": "Reference image 2",
+        "tooltip": "Reference image 2 (used in all-in-one reference mode)"
+      },
+      "参考图3": {
+        "name": "Reference image 3",
+        "tooltip": "Reference image 3 (used in all-in-one reference mode)"
+      },
+      "参考图4": {
+        "name": "Reference image 4",
+        "tooltip": "Reference image 4 (used in all-in-one reference mode)"
+      },
+      "参考图5": {
+        "name": "Reference image 5",
+        "tooltip": "Reference image 5 (used in all-in-one reference mode)"
+      },
+      "参考音频1": {
+        "name": "Reference audio 1",
+        "tooltip": "Reference audio 1 (all-in-one reference mode, optional)"
+      },
+      "参考音频2": {
+        "name": "Reference audio 2",
+        "tooltip": "Reference audio 2 (all-in-one reference mode, optional)"
+      },
+      "参考音频3": {
+        "name": "Reference audio 3",
+        "tooltip": "Reference audio 3 (all-in-one reference mode, optional)"
+      },
+      "参考视频1": {
+        "name": "Reference video 1",
+        "tooltip": "Reference video 1 (all-in-one reference mode, optional); uploaded to Tencent COS for a public URL when configured, otherwise falls back to base64"
+      },
+      "参考视频2": {
+        "name": "Reference video 2",
+        "tooltip": "Reference video 2 (all-in-one reference mode, optional); uploaded to Tencent COS for a public URL when configured, otherwise falls back to base64"
+      },
+      "参考视频3": {
+        "name": "Reference video 3",
+        "tooltip": "Reference video 3 (all-in-one reference mode, optional); uploaded to Tencent COS for a public URL when configured, otherwise falls back to base64"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "frames",
+        "tooltip": "Generated video frame sequence (RGB images), shape [N, H, W, C]"
+      },
+      "1": {
+        "name": "audio",
+        "tooltip": "Audio data from the video (None if no audio), contains waveform and sample_rate"
+      },
+      "2": {
+        "name": "fps",
+        "tooltip": "Frame rate (FPS) of the video"
       }
     }
   }

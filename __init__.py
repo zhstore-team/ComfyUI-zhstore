@@ -81,4 +81,48 @@ async def get_config(request):
     return web.json_response({"has_api_key": has_key})
 
 
+# ====== 腾讯云 COS 配置（用于参考视频生成公网 URL）======
+@server.PromptServer.instance.routes.post("/agnes/save_cos_config")
+async def save_cos_config(request):
+    try:
+        data = await request.json()
+        secret_id = (data.get("secret_id") or "").strip()
+        secret_key = (data.get("secret_key") or "").strip()
+        bucket = (data.get("bucket") or "").strip()
+        region = (data.get("region") or "").strip()
+        domain = (data.get("domain") or "").strip()
+
+        config = load_agnes_config()
+        config["cos_secret_id"] = secret_id
+        config["cos_secret_key"] = secret_key
+        config["cos_bucket"] = bucket
+        config["cos_region"] = region
+        config["cos_domain"] = domain
+        if save_agnes_config(config):
+            return web.json_response({"status": "success", "message": "COS 配置已保存"})
+        else:
+            return web.json_response({"status": "error", "message": "保存失败，请检查插件目录权限"}, status=500)
+    except Exception as e:
+        logger.error(f"保存 COS 配置时发生异常: {e}")
+        return web.json_response({"status": "error", "message": f"服务器错误: {str(e)}"}, status=500)
+
+@server.PromptServer.instance.routes.get("/agnes/get_cos_config")
+async def get_cos_config(request):
+    config = load_agnes_config()
+    has_cos = bool(
+        config.get("cos_secret_id")
+        and config.get("cos_secret_key")
+        and config.get("cos_bucket")
+        and config.get("cos_region")
+    )
+    return web.json_response({
+        "has_cos": has_cos,
+        "cos_secret_id": config.get("cos_secret_id", ""),
+        "cos_secret_key": config.get("cos_secret_key", ""),
+        "cos_bucket": config.get("cos_bucket", ""),
+        "cos_region": config.get("cos_region", ""),
+        "cos_domain": config.get("cos_domain", ""),
+    })
+
+
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
