@@ -1307,7 +1307,7 @@ class AgnesTextToImage:
                     "step": 64,
                     "tooltip": "图像高度"
                 }),
-                   "seed": ("INT", {
+                "seed": ("INT", {
                     "default": 0,
                     "min": 0,
                     "max": 0xffffffffffffffff,
@@ -1338,13 +1338,14 @@ class AgnesTextToImage:
             "Content-Type": "application/json"
         }
 
-        # 构建请求体（文生图，URL输出，然后下载，或者直接Base64）
-        # 为避免下载额外URL，使用 return_base64: true 直接获取Base64数据
+        # 构建请求体（文生图，URL 输出后下载）
+        # 注意：不要请求 Base64 输出。经实测，服务端对纯文生图的 Base64 输出请求
+        # （return_base64 或 extra_body.response_format=b64_json）会挂起不响应导致超时，
+        # 仅 URL 输出正常。图生图（带参考图）的 Base64 输出不受影响。
         payload = {
             "model": "agnes-image-2.1-flash",
             "prompt": prompt,
             "size": size,
-            "return_base64": True,   # 直接返回Base64，省去下载步骤
         }
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=(10, 300))
