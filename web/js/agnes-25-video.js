@@ -36,16 +36,28 @@ const INPUT_TYPES = {
     参考音频3: "AUDIO",
 };
 
+function isDefaultSize(node) {
+    // 判断节点当前尺寸是否仍是“默认尺寸”（即未被手动调整、也非复制/粘贴/载入工作流得到的尺寸）
+    if (!node || !node.size || typeof node.computeSize !== "function") return true;
+    const computed = node.computeSize();
+    return Math.abs(node.size[0] - computed[0]) < 0.5 && Math.abs(node.size[1] - computed[1]) < 0.5;
+}
+
 function applyMode(node, mode) {
     if (!node || !node.inputs) return;
 
     const wanted = MODE_INPUTS[mode] || [];
+
+    // 在改动端口前记录：节点是否为默认尺寸（复制/粘贴出的节点此时带有原节点的尺寸，不应被覆盖）
+    const defaultSize = isDefaultSize(node);
+    let changed = false;
 
     // 1. 移除当前模式不需要的媒体端口（removeInput 会自动断开连接）
     for (let i = node.inputs.length - 1; i >= 0; i--) {
         const inp = node.inputs[i];
         if (inp && ALL_MEDIA_INPUTS.includes(inp.name) && !wanted.includes(inp.name)) {
             node.removeInput(i);
+            changed = true;
         }
     }
 
@@ -54,11 +66,15 @@ function applyMode(node, mode) {
     for (const name of wanted) {
         if (!existing.includes(name)) {
             node.addInput(name, INPUT_TYPES[name] || "IMAGE", { tooltip: "" });
+            changed = true;
         }
     }
 
-    // 3. 刷新节点布局
-    node.setSize(node.computeSize());
+    // 3. 仅在“端口结构变化”且“节点仍为默认尺寸”时刷新布局，
+    //    否则保留当前尺寸，避免复制/粘贴节点时尺寸被重置为默认大小
+    if (changed && defaultSize) {
+        node.setSize(node.computeSize());
+    }
     if (node.graph) {
         node.graph.setDirtyCanvas(true, true);
     }
