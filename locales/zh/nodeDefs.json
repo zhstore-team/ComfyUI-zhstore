@@ -38,16 +38,12 @@
     },
     "outputs": {
       "0": {
-        "name": "帧图像",
-        "tooltip": "生成的视频帧序列（RGB图像），形状 [N, H, W, C]"
+        "name": "视频",
+        "tooltip": "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点"
       },
       "1": {
-        "name": "音频",
-        "tooltip": "视频中的音频数据（若无音频则为 None），包含 waveform 和 sample_rate"
-      },
-      "2": {
         "name": "帧率",
-        "tooltip": "视频的帧率（FPS）"
+        "tooltip": "视频的实际帧率（FPS）"
       }
     }
   },
@@ -94,16 +90,12 @@
     },
     "outputs": {
       "0": {
-        "name": "帧图像",
-        "tooltip": "生成的视频帧序列（RGB图像），形状 [N, H, W, C]"
+        "name": "视频",
+        "tooltip": "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点"
       },
       "1": {
-        "name": "音频",
-        "tooltip": "视频中的音频数据（若无音频则为 None），包含 waveform 和 sample_rate"
-      },
-      "2": {
         "name": "帧率",
-        "tooltip": "视频的帧率（FPS）"
+        "tooltip": "视频的实际帧率（FPS）"
       }
     }
   },
@@ -158,16 +150,12 @@
     },
     "outputs": {
       "0": {
-        "name": "帧图像",
-        "tooltip": "生成的视频帧序列（RGB图像），形状 [N, H, W, C]"
+        "name": "视频",
+        "tooltip": "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点"
       },
       "1": {
-        "name": "音频",
-        "tooltip": "视频中的音频数据（若无音频则为 None），包含 waveform 和 sample_rate"
-      },
-      "2": {
         "name": "帧率",
-        "tooltip": "视频的帧率（FPS）"
+        "tooltip": "视频的实际帧率（FPS）"
       }
     }
   },
@@ -722,16 +710,12 @@
     },
     "outputs": {
       "0": {
-        "name": "帧图像",
-        "tooltip": "生成的视频帧序列（RGB图像），形状 [N, H, W, C]"
+        "name": "视频",
+        "tooltip": "生成的原始视频文件（mp4），可直接连接「保存视频」等视频消费节点"
       },
       "1": {
-        "name": "音频",
-        "tooltip": "视频中的音频数据（若无音频则为 None），包含 waveform 和 sample_rate"
-      },
-      "2": {
         "name": "帧率",
-        "tooltip": "视频的帧率（FPS）"
+        "tooltip": "视频的实际帧率（FPS）"
       }
     }
   },
@@ -805,29 +789,25 @@
       },
       "参考视频1": {
         "name": "参考视频1",
-        "tooltip": "参考视频 1（全能参考模式，可选）；已配置腾讯云COS时自动上传生成公网URL，未配置时回退Base64"
+        "tooltip": "参考视频 1（全能参考模式，可选），以 Base64 直接上传"
       },
       "参考视频2": {
         "name": "参考视频2",
-        "tooltip": "参考视频 2（全能参考模式，可选）；已配置腾讯云COS时自动上传生成公网URL，未配置时回退Base64"
+        "tooltip": "参考视频 2（全能参考模式，可选），以 Base64 直接上传"
       },
       "参考视频3": {
         "name": "参考视频3",
-        "tooltip": "参考视频 3（全能参考模式，可选）；已配置腾讯云COS时自动上传生成公网URL，未配置时回退Base64"
+        "tooltip": "参考视频 3（全能参考模式，可选），以 Base64 直接上传"
       }
     },
     "outputs": {
       "0": {
-        "name": "帧图像",
-        "tooltip": "生成的视频帧序列（RGB图像），形状 [N, H, W, C]"
+        "name": "视频",
+        "tooltip": "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点"
       },
       "1": {
-        "name": "音频",
-        "tooltip": "视频中的音频数据（若无音频则为 None），包含 waveform 和 sample_rate"
-      },
-      "2": {
         "name": "帧率",
-        "tooltip": "视频的帧率（FPS）"
+        "tooltip": "视频的实际帧率（FPS）"
       }
     }
   }

@@ -55,7 +55,9 @@ function applyMode(node, mode) {
     // 1. 移除当前模式不需要的媒体端口（removeInput 会自动断开连接）
     for (let i = node.inputs.length - 1; i >= 0; i--) {
         const inp = node.inputs[i];
-        if (inp && ALL_MEDIA_INPUTS.includes(inp.name) && !wanted.includes(inp.name)) {
+        // 仅移除「非当前模式需要 且 尚未连接」的媒体端口；
+        // 已连接的端口一律保留，避免复制/粘贴时 ComfyUI 已恢复的连接被删而断线
+        if (inp && ALL_MEDIA_INPUTS.includes(inp.name) && !wanted.includes(inp.name) && !inp.link) {
             node.removeInput(i);
             changed = true;
         }
@@ -91,10 +93,23 @@ app.registerExtension({
 
             const modeWidget = this.widgets?.find((w) => w.name === "模式");
             if (modeWidget) {
-                // 监听模式切换
+                // 监听模式切换，端口随模式即时调整
                 modeWidget.callback = (value) => applyMode(this, value);
-                // 初始化时按当前模式应用一次端口
-                setTimeout(() => applyMode(this, modeWidget.value), 0);
+                // 同步按当前模式应用一次端口（不使用 setTimeout，
+                // 避免与复制/粘贴、载入工作流时的连接恢复产生竞态而断线）
+                applyMode(this, modeWidget.value);
+            }
+            return result;
+        };
+
+        // 复制粘贴 / 载入工作流会走 configure 恢复端口与连接，
+        // 在其返回后同步再对齐一次端口（applyMode 会保护已连接的端口）
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function (info) {
+            const result = onConfigure?.apply(this, arguments);
+            const modeWidget = this.widgets?.find((w) => w.name === "模式");
+            if (modeWidget) {
+                applyMode(this, modeWidget.value);
             }
             return result;
         };

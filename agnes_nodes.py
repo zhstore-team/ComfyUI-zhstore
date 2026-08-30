@@ -2,6 +2,7 @@
 import json
 import os
 import time
+import gc
 import tempfile
 import subprocess
 import shutil
@@ -26,6 +27,8 @@ except ImportError:
 
 # ComfyUI 路径工具
 import folder_paths
+# ComfyUI 视频输出容器（SaveVideo 等视频消费节点所需）
+from comfy_api.latest import InputImpl
 
 # 配置文件
 PLUGIN_DIR = os.path.dirname(__file__)
@@ -182,70 +185,6 @@ def _summarize_payload(payload) -> dict:
             out[k] = v
     return out
 
-# ====== 腾讯云 COS（参考视频公网 URL）====== 
-# 临时开关：目前屏蔽 COS 方案，参考视频回退 Base64；需要恢复时改为 True
-COS_FEATURE_ENABLED = False
-
-def _load_cos_config() -> dict:
-    """读取腾讯云 COS 配置（存在 agnes_config.json 的 cos_* 键）"""
-    cfg = load_agnes_config()
-    return {
-        "secret_id": (cfg.get("cos_secret_id") or "").strip(),
-        "secret_key": (cfg.get("cos_secret_key") or "").strip(),
-        "bucket": (cfg.get("cos_bucket") or "").strip(),
-        "region": (cfg.get("cos_region") or "").strip(),
-        "domain": (cfg.get("cos_domain") or "").strip(),
-    }
-
-def _cos_enabled() -> bool:
-    c = _load_cos_config()
-    return all([c["secret_id"], c["secret_key"], c["bucket"], c["region"]])
-
-def _upload_to_cos(local_path: str):
-    """将本地视频上传到腾讯云 COS，返回公网直链；失败返回 None（回退 Base64）。
-    默认使用 `https://{bucket}.cos.{region}.myqcloud.com/{key}`，可配置自定义域名覆盖。
-    """
-    if not COS_FEATURE_ENABLED:
-        return None
-    if not _cos_enabled():
-        return None
-    try:
-        from qcloud_cos import CosConfig, CosS3Client
-        import uuid as _uuid
-        import requests as _req
-        c = _load_cos_config()
-        client = CosS3Client(CosConfig(
-            Region=c["region"],
-            SecretId=c["secret_id"],
-            SecretKey=c["secret_key"],
-            Scheme="https",
-        ))
-        ext = os.path.splitext(local_path)[1] or ".mp4"
-        import datetime as _dt
-        date_folder = _dt.datetime.now().strftime("%Y-%m-%d")
-        key = f"agnes/{date_folder}/{_uuid.uuid4().hex}{ext}"
-        client.upload_file(Bucket=c["bucket"], Key=key, LocalFilePath=local_path)
-
-        base = c["domain"].rstrip("/") if c["domain"] else f"{c['bucket']}.cos.{c['region']}.myqcloud.com"
-        url = f"https://{base}/{key}"
-
-        # 自检：确认公网可达且返回视频类型
-        resp = _req.get(url, stream=True, timeout=(5, 15))
-        ct = (resp.headers.get("Content-Type") or "").lower()
-        code = resp.status_code
-        resp.close()
-        if code == 200 and ct.startswith("video"):
-            print(f"[Agnes 2.5 付费] 参考视频已上传 COS: {url}")
-            return url
-        print(f"[Agnes 2.5 付费] COS 上传成功但自检未通过（HTTP {code}, Content-Type={ct!r}），回退 Base64")
-        return None
-    except ImportError:
-        print("[Agnes 2.5 付费] 未安装 cos-python-sdk-v5，无法上传 COS，回退 Base64。请在 ComfyUI 环境执行: pip install cos-python-sdk-v5")
-        return None
-    except Exception as e:
-        print(f"[Agnes 2.5 付费] COS 上传失败: {e}，回退 Base64")
-        return None
-
 # 有效帧数
 VALID_NUM_FRAMES = [81, 121, 161, 201, 241, 281, 321, 361, 401, 441]
 MIN_FRAMES = min(VALID_NUM_FRAMES)
@@ -319,15 +258,19 @@ class AgnesTextToVideo:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
-    RETURN_NAMES = ("frames", "audio", "fps")
+    RETURN_TYPES = ("VIDEO", "FLOAT")
+    RETURN_NAMES = ("视频", "帧率")
+    OUTPUT_TOOLTIPS = (
+        "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点",
+        "视频的实际帧率（fps）",
+    )
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
     DESCRIPTION = "使用Agnes-Video-V2.0根据文本生成视频。通过时长（秒）控制视频长度，自动适配API帧数约束。需要先在ComfyUI设置中配置 Agens的 API Key。"
 
     def generate_video(self, prompt: str, negative_prompt: str, width: int, height: int,
                        frame_rate: float, duration_seconds: float, seed: int,
-                       num_inference_steps: int = 50) -> Tuple[torch.Tensor, Optional[Dict], float]:
+                       num_inference_steps: int = 50) -> Tuple["InputImpl.VideoFromFile", float]:
         api_key = get_api_key()
         print("发起请求...")
         if not api_key:
@@ -384,14 +327,10 @@ class AgnesTextToVideo:
         video_url = self._poll_for_result(video_id, api_key)
         video_path = self._download_video(video_url)
 
-        frames_tensor, audio_data = self._extract_frames_and_audio(video_path, num_frames)
+        fps = self._read_fps(video_path)
+        video_out = InputImpl.VideoFromFile(video_path)
 
-        try:
-            os.unlink(video_path)
-        except:
-            pass
-
-        return frames_tensor, audio_data, float(frame_rate)
+        return video_out, float(fps)
 
     def _poll_for_result(self, video_id: str, api_key: str, max_retries: int = 180, interval: float = 5.0) -> str:
         """
@@ -486,95 +425,17 @@ class AgnesTextToVideo:
                         os.unlink(temp_path)
                     raise RuntimeError(f"下载视频失败：{str(e)}")
 
-    def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
+    def _read_fps(self, video_path: str) -> float:
+        """仅读取视频帧率，未读取到则回退 24.0（不再整段解帧/转音频，避免内存常驻）"""
         if not CV2_AVAILABLE:
-            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise RuntimeError(f"无法打开视频: {video_path}")
-
-        frames = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
-            frames.append(img_tensor)
-        cap.release()
-
-        if not frames:
-            raise RuntimeError("未提取到任何帧")
-        frames_tensor = torch.stack(frames, dim=0)
-        print(f"[Agnes] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}")
-
-        audio_data = self._extract_audio(video_path)
-        return frames_tensor, audio_data
-
-    def _extract_audio(self, video_path: str) -> Optional[Dict]:
-        """
-        使用 imageio_ffmpeg + ffmpeg 命令行提取音频为 WAV，
-        然后用 wave 模块直接读取，输出波形形状为 [1, 1, samples]
-        以便兼容某些期望三维输入的下游节点（如 combine_video）
-        """
+            return 24.0
         try:
-            import imageio_ffmpeg
-            import subprocess
-            import wave
-            import numpy as np
-
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            print(f"[Agnes] 使用 FFmpeg 路径: {ffmpeg_exe}")
-
-            # 创建临时 WAV 文件
-            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            temp_audio.close()
-
-            # 调用 ffmpeg 提取音频（单声道，16kHz，PCM 16-bit）
-            cmd = [
-                ffmpeg_exe, "-i", video_path,
-                "-vn",                     # 无视频
-                "-acodec", "pcm_s16le",   # PCM 16-bit
-                "-ar", "16000",           # 16kHz
-                "-ac", "1",               # 单声道
-                "-y",                     # 覆盖输出
-                temp_audio.name
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"[Agnes] ffmpeg 提取失败，返回码: {result.returncode}")
-                print(f"[Agnes] stderr: {result.stderr}")
-                return None
-
-            # 使用 wave 模块读取 WAV 文件
-            with wave.open(temp_audio.name, 'rb') as wav:
-                sample_rate = wav.getframerate()
-                n_frames = wav.getnframes()
-                audio_data = wav.readframes(n_frames)
-                # 转换为 float32 范围 [-1, 1]
-                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                # 转换为 torch tensor，形状调整为 [1, 1, samples]（batch, channels, time）
-                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)  # [1, 1, samples]
-
-            # 截取前30秒
-            max_samples = sample_rate * 30
-            if waveform.shape[-1] > max_samples:
-                waveform = waveform[:, :, :max_samples]
-
-            print(f"[Agnes] 音频提取成功 (通过 FFmpeg + wave)，波形形状: {waveform.shape}")
-            return {"waveform": waveform, "sample_rate": sample_rate}
-
-        except Exception as e:
-            print(f"[Agnes] 音频提取失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-
-        finally:
-            # 清理临时文件
-            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
-                os.unlink(temp_audio.name)
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            return float(fps) if fps and fps > 0 else 24.0
+        except Exception:
+            return 24.0
 
 
 
@@ -643,15 +504,19 @@ class AgnesImageToVideo:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
-    RETURN_NAMES = ("frames", "audio", "fps")
+    RETURN_TYPES = ("VIDEO", "FLOAT")
+    RETURN_NAMES = ("视频", "帧率")
+    OUTPUT_TOOLTIPS = (
+        "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点",
+        "视频的实际帧率（fps）",
+    )
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
     DESCRIPTION = "使用Agnes-Video-V2.0根据单张图片生成视频。通过时长（秒）控制视频长度，自动适配API帧数约束。需要先在ComfyUI设置中配置Agens的API Key。"
 
     def generate_video(self, image: torch.Tensor, prompt: str, negative_prompt: str,
                        width: int, height: int, frame_rate: float, duration_seconds: float,
-                       seed: int, num_inference_steps: int = 50) -> Tuple[torch.Tensor, Optional[Dict], float]:
+                       seed: int, num_inference_steps: int = 50) -> Tuple["InputImpl.VideoFromFile", float]:
         api_key = get_api_key()
         if not api_key:
             raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
@@ -716,14 +581,10 @@ class AgnesImageToVideo:
         video_url = self._poll_for_result(video_id, api_key)
         video_path = self._download_video(video_url)
 
-        frames_tensor, audio_data = self._extract_frames_and_audio(video_path, num_frames)
+        fps = self._read_fps(video_path)
+        video_out = InputImpl.VideoFromFile(video_path)
 
-        try:
-            os.unlink(video_path)
-        except:
-            pass
-
-        return frames_tensor, audio_data, float(frame_rate)
+        return video_out, float(fps)
 
     def _image_to_data_url(self, image_tensor: torch.Tensor) -> str:
         """
@@ -859,79 +720,19 @@ class AgnesImageToVideo:
                         os.unlink(temp_path)
                     raise RuntimeError(f"下载视频失败：{str(e)}")
 
-    def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
-        """提取视频帧和音频（与文生视频完全一致）"""
+    def _read_fps(self, video_path: str) -> float:
+        """仅读取视频帧率，未读取到则回退 24.0（不再整段解帧/转音频，避免内存常驻）"""
         if not CV2_AVAILABLE:
-            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise RuntimeError(f"无法打开视频: {video_path}")
-
-        frames = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
-            frames.append(img_tensor)
-        cap.release()
-
-        if not frames:
-            raise RuntimeError("未提取到任何帧")
-        frames_tensor = torch.stack(frames, dim=0)
-        print(f"[Agnes] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}")
-
-        audio_data = self._extract_audio(video_path)
-        return frames_tensor, audio_data
-
-    def _extract_audio(self, video_path: str) -> Optional[Dict]:
-        """从视频中提取音频（与文生视频完全一致）"""
+            return 24.0
         try:
-            import imageio_ffmpeg
-            import subprocess
-            import wave
-            import numpy as np
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            return float(fps) if fps and fps > 0 else 24.0
+        except Exception:
+            return 24.0
 
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            print(f"[Agnes] 使用 FFmpeg 路径: {ffmpeg_exe}")
-
-            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            temp_audio.close()
-
-            cmd = [
-                ffmpeg_exe, "-i", video_path,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-                "-y", temp_audio.name
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"[Agnes] ffmpeg 提取失败，返回码: {result.returncode}")
-                return None
-
-            with wave.open(temp_audio.name, 'rb') as wav:
-                sample_rate = wav.getframerate()
-                n_frames = wav.getnframes()
-                audio_data = wav.readframes(n_frames)
-                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
-
-            max_samples = sample_rate * 30
-            if waveform.shape[-1] > max_samples:
-                waveform = waveform[:, :, :max_samples]
-
-            print(f"[Agnes] 音频提取成功，波形形状: {waveform.shape}")
-            return {"waveform": waveform, "sample_rate": sample_rate}
-
-        except Exception as e:
-            print(f"[Agnes] 音频提取失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
-            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
-                os.unlink(temp_audio.name)
+    
 
 
 class AgnesMultiImageToVideo:
@@ -999,8 +800,12 @@ class AgnesMultiImageToVideo:
         }
         return inputs
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
-    RETURN_NAMES = ("frames", "audio", "fps")
+    RETURN_TYPES = ("VIDEO", "FLOAT")
+    RETURN_NAMES = ("视频", "帧率")
+    OUTPUT_TOOLTIPS = (
+        "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点",
+        "视频的实际帧率（fps）",
+    )
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
     DESCRIPTION = "使用Agnes-Video-V2.0根据首帧、尾帧（可选中帧）参考图生成视频，在参考图之间产生平滑过渡动画。"
@@ -1008,7 +813,7 @@ class AgnesMultiImageToVideo:
     def generate_video(self, image1: torch.Tensor, prompt: str, negative_prompt: str,
                        width: int, height: int, frame_rate: float, duration_seconds: float,
                        seed: int, num_inference_steps: int = 50,
-                       image2=None, image3=None) -> Tuple[torch.Tensor, Optional[Dict], float]:
+                       image2=None, image3=None) -> Tuple["InputImpl.VideoFromFile", float]:
         api_key = get_api_key()
         if not api_key:
             raise ValueError("未找到Agnes API Key，请在ComfyUI设置中配置（Agnes AI API Key）")
@@ -1095,14 +900,10 @@ class AgnesMultiImageToVideo:
         video_url = self._poll_for_result(video_id, api_key)
         video_path = self._download_video(video_url)
 
-        frames_tensor, audio_data = self._extract_frames_and_audio(video_path, num_frames)
+        fps = self._read_fps(video_path)
+        video_out = InputImpl.VideoFromFile(video_path)
 
-        try:
-            os.unlink(video_path)
-        except:
-            pass
-
-        return frames_tensor, audio_data, float(frame_rate)
+        return video_out, float(fps)
 
     def _image_to_base64(self, image_tensor: torch.Tensor) -> str:
         """将 ComfyUI 图像 Tensor 转换为纯 Base64 字符串"""
@@ -1209,78 +1010,17 @@ class AgnesMultiImageToVideo:
                         os.unlink(temp_path)
                     raise RuntimeError(f"下载视频失败：{str(e)}")
 
-    def _extract_frames_and_audio(self, video_path: str, expected_frames: int) -> Tuple[torch.Tensor, Optional[Dict]]:
-        """提取视频帧和音频"""
+    def _read_fps(self, video_path: str) -> float:
+        """仅读取视频帧率，未读取到则回退 24.0（不再整段解帧/转音频，避免内存常驻）"""
         if not CV2_AVAILABLE:
-            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise RuntimeError(f"无法打开视频: {video_path}")
-
-        frames = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
-            frames.append(img_tensor)
-        cap.release()
-
-        if not frames:
-            raise RuntimeError("未提取到任何帧")
-        frames_tensor = torch.stack(frames, dim=0)
-        print(f"[Agnes] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}")
-
-        audio_data = self._extract_audio(video_path)
-        return frames_tensor, audio_data
-
-    def _extract_audio(self, video_path: str) -> Optional[Dict]:
-        """提取音频"""
+            return 24.0
         try:
-            import imageio_ffmpeg
-            import subprocess
-            import wave
-            import numpy as np
-
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            temp_audio.close()
-
-            cmd = [
-                ffmpeg_exe, "-i", video_path,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-                "-y", temp_audio.name
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"[Agnes] ffmpeg 提取失败，返回码: {result.returncode}")
-                return None
-
-            with wave.open(temp_audio.name, 'rb') as wav:
-                sample_rate = wav.getframerate()
-                n_frames = wav.getnframes()
-                audio_data = wav.readframes(n_frames)
-                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
-
-            max_samples = sample_rate * 30
-            if waveform.shape[-1] > max_samples:
-                waveform = waveform[:, :, :max_samples]
-
-            print(f"[Agnes] 音频提取成功，波形形状: {waveform.shape}")
-            return {"waveform": waveform, "sample_rate": sample_rate}
-        except Exception as e:
-            print(f"[Agnes] 音频提取失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
-            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
-                os.unlink(temp_audio.name)
-
-
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            return float(fps) if fps and fps > 0 else 24.0
+        except Exception:
+            return 24.0
 
 class AgnesTextToImage:
     """文生图节点：根据文本提示生成图像"""
@@ -2252,11 +1992,15 @@ class Agnes25AllInOneVideo:
         }
         return inputs
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
-    RETURN_NAMES = ("frames", "audio", "fps")
+    RETURN_TYPES = ("VIDEO", "FLOAT")
+    RETURN_NAMES = ("视频", "帧率")
+    OUTPUT_TOOLTIPS = (
+        "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点",
+        "视频的实际帧率（fps）",
+    )
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
-    DESCRIPTION = "使用Agnes-Video-2.5-Flash生成视频：支持文生视频、图生视频、首尾帧、全能参考四种模式，通过「模式」参数自动切换端口与参数。需要先在ComfyUI设置中配置Agens的API Key。"
+    DESCRIPTION = "使用Agnes-Video-2.5-Flash生成视频：支持文生视频、图生视频、首尾帧、全能参考四种模式，通过「模式」参数自动切换端口与参数。需要先在ComfyUI设置中配置Agens的API Key。输出「视频」可直接连接保存视频节点。"
 
     def generate_video(self, 模式, prompt, seconds, aspect_ratio, seed,
                        首帧图=None, 尾帧图=None,
@@ -2352,14 +2096,10 @@ class Agnes25AllInOneVideo:
         # 2.5 Flash 推荐使用 video_id + model_name 轮询
         video_url = self._poll_for_result(video_id, api_key)
         video_path = self._download_video(video_url)
-        frames_tensor, audio_data, fps = self._extract_frames_audio_fps(video_path)
+        fps = self._read_fps(video_path)
+        video_out = InputImpl.VideoFromFile(video_path)
 
-        try:
-            os.unlink(video_path)
-        except Exception:
-            pass
-
-        return frames_tensor, audio_data, fps
+        return video_out, float(fps)
 
     def _image_to_url(self, image_tensor: torch.Tensor) -> str:
         """将图像 Tensor 转换为 Data URI（与现有节点一致）"""
@@ -2534,78 +2274,19 @@ class Agnes25AllInOneVideo:
                         os.unlink(temp_path)
                     raise RuntimeError(f"下载视频失败：{str(e)}")
 
-    def _extract_frames_audio_fps(self, video_path: str) -> Tuple[torch.Tensor, Optional[Dict], float]:
-        """提取视频帧、音频与实际帧率（fps 读取失败回退 24.0）"""
-        if not CV2_AVAILABLE:
-            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise RuntimeError(f"无法打开视频: {video_path}")
-
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        fps = fps if fps and fps > 0 else 24.0
-
-        frames = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
-            frames.append(img_tensor)
-        cap.release()
-
-        if not frames:
-            raise RuntimeError("未提取到任何帧")
-        frames_tensor = torch.stack(frames, dim=0)
-        print(f"[Agnes 2.5] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}，fps: {fps}")
-
-        audio_data = self._extract_audio(video_path)
-        return frames_tensor, audio_data, float(fps)
-
-    def _extract_audio(self, video_path: str) -> Optional[Dict]:
-        """使用 ffmpeg + wave 提取音频，输出波形形状 [1, 1, samples]"""
-        try:
-            import imageio_ffmpeg
-            import subprocess
-            import wave
-
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            temp_audio.close()
-
-            cmd = [
-                ffmpeg_exe, "-i", video_path,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-                "-y", temp_audio.name
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"[Agnes 2.5] ffmpeg 提取失败，返回码: {result.returncode}")
-                return None
-
-            with wave.open(temp_audio.name, 'rb') as wav:
-                sample_rate = wav.getframerate()
-                n_frames = wav.getnframes()
-                audio_data = wav.readframes(n_frames)
-                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
-
-            max_samples = sample_rate * 30
-            if waveform.shape[-1] > max_samples:
-                waveform = waveform[:, :, :max_samples]
-
-            print(f"[Agnes 2.5] 音频提取成功，波形形状: {waveform.shape}")
-            return {"waveform": waveform, "sample_rate": sample_rate}
-        except Exception as e:
-            print(f"[Agnes 2.5] 音频提取失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
-            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
-                os.unlink(temp_audio.name)
+    def _read_fps(self, video_path: str) -> float:
+        """仅读取视频帧率，未读取到则回退 24.0（不再整段解帧/转音频）"""
+        fps = 24.0
+        if CV2_AVAILABLE:
+            try:
+                cap = cv2.VideoCapture(video_path)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                if not fps or fps <= 0:
+                    fps = 24.0
+            except Exception:
+                fps = 24.0
+        return float(fps)
 
 
 class Agnes25AllInOneVideoPro:
@@ -2686,11 +2367,15 @@ class Agnes25AllInOneVideoPro:
         }
         return inputs
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT")
-    RETURN_NAMES = ("frames", "audio", "fps")
+    RETURN_TYPES = ("VIDEO", "FLOAT")
+    RETURN_NAMES = ("视频", "帧率")
+    OUTPUT_TOOLTIPS = (
+        "生成的原始视频文件（mp4），可直连「保存视频」等视频消费节点",
+        "视频的实际帧率（fps）",
+    )
     FUNCTION = "generate_video"
     CATEGORY = "智绘Store/Agens AI"
-    DESCRIPTION = "使用Agnes-Video-2.5生成视频（付费）：支持文生视频、图生视频、首尾帧、全能参考四种模式，支持 720P/960P/2K 分辨率，全能参考可含参考视频。需要先在ComfyUI设置中配置Agens的API Key。"
+    DESCRIPTION = "使用Agnes-Video-2.5生成视频（付费）：支持文生视频、图生视频、首尾帧、全能参考四种模式，支持 720P/960P/2K 分辨率，全能参考可含参考视频。需要先在ComfyUI设置中配置Agens的API Key。输出「视频」可直接连接保存视频节点。"
 
     def generate_video(self, 模式, prompt, seconds, aspect_ratio, size, seed,
                        首帧图=None, 尾帧图=None,
@@ -2792,14 +2477,10 @@ class Agnes25AllInOneVideoPro:
 
         video_url = self._poll_for_result(video_id, api_key)
         video_path = self._download_video(video_url)
-        frames_tensor, audio_data, fps = self._extract_frames_audio_fps(video_path)
+        fps = self._read_fps(video_path)
+        video_out = InputImpl.VideoFromFile(video_path)
 
-        try:
-            os.unlink(video_path)
-        except Exception:
-            pass
-
-        return frames_tensor, audio_data, fps
+        return video_out, float(fps)
 
     def _image_to_url(self, image_tensor: torch.Tensor) -> str:
         """将图像 Tensor 转换为 Data URI"""
@@ -2922,11 +2603,6 @@ class Agnes25AllInOneVideoPro:
         if not os.path.exists(path):
             raise ValueError(f"参考视频文件不存在：{path}")
 
-        # 优先：若配置了腾讯云 COS，则上传拿公网 URL
-        public_url = _upload_to_cos(path)
-        if public_url:
-            return {"url": public_url}
-
         with open(path, "rb") as f:
             data = f.read()
         ext = os.path.splitext(path)[1].lower().lstrip(".")
@@ -3041,78 +2717,19 @@ class Agnes25AllInOneVideoPro:
                         os.unlink(temp_path)
                     raise RuntimeError(f"下载视频失败：{str(e)}")
 
-    def _extract_frames_audio_fps(self, video_path: str) -> Tuple[torch.Tensor, Optional[Dict], float]:
-        """提取视频帧、音频与实际帧率（fps 读取失败回退 24.0）"""
-        if not CV2_AVAILABLE:
-            raise RuntimeError("OpenCV未安装，请运行: pip install opencv-python")
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise RuntimeError(f"无法打开视频: {video_path}")
-
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        fps = fps if fps and fps > 0 else 24.0
-
-        frames = []
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(frame_rgb)
-            img_tensor = torch.from_numpy(np.array(pil_img).astype(np.float32) / 255.0)
-            frames.append(img_tensor)
-        cap.release()
-
-        if not frames:
-            raise RuntimeError("未提取到任何帧")
-        frames_tensor = torch.stack(frames, dim=0)
-        print(f"[Agnes 2.5 付费] 提取帧数: {len(frames)}，张量形状: {frames_tensor.shape}，fps: {fps}")
-
-        audio_data = self._extract_audio(video_path)
-        return frames_tensor, audio_data, float(fps)
-
-    def _extract_audio(self, video_path: str) -> Optional[Dict]:
-        """使用 ffmpeg + wave 提取音频，输出波形形状 [1, 1, samples]"""
-        try:
-            import imageio_ffmpeg
-            import subprocess
-            import wave
-
-            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-            temp_audio = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            temp_audio.close()
-
-            cmd = [
-                ffmpeg_exe, "-i", video_path,
-                "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
-                "-y", temp_audio.name
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"[Agnes 2.5 付费] ffmpeg 提取失败，返回码: {result.returncode}")
-                return None
-
-            with wave.open(temp_audio.name, 'rb') as wav:
-                sample_rate = wav.getframerate()
-                n_frames = wav.getnframes()
-                audio_data = wav.readframes(n_frames)
-                waveform = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
-                waveform = torch.from_numpy(waveform).unsqueeze(0).unsqueeze(0)
-
-            max_samples = sample_rate * 30
-            if waveform.shape[-1] > max_samples:
-                waveform = waveform[:, :, :max_samples]
-
-            print(f"[Agnes 2.5 付费] 音频提取成功，波形形状: {waveform.shape}")
-            return {"waveform": waveform, "sample_rate": sample_rate}
-        except Exception as e:
-            print(f"[Agnes 2.5 付费] 音频提取失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-        finally:
-            if 'temp_audio' in locals() and os.path.exists(temp_audio.name):
-                os.unlink(temp_audio.name)
+    def _read_fps(self, video_path: str) -> float:
+        """仅读取视频帧率，未读取到则回退 24.0（不再整段解帧/转音频）"""
+        fps = 24.0
+        if CV2_AVAILABLE:
+            try:
+                cap = cv2.VideoCapture(video_path)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                if not fps or fps <= 0:
+                    fps = 24.0
+            except Exception:
+                fps = 24.0
+        return float(fps)
 
 
 # 节点注册

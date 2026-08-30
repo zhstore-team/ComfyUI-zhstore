@@ -1,3 +1,1 @@
 opencv-python
-imageio_ffmpeg
-cos-python-sdk-v5
